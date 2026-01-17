@@ -46,6 +46,7 @@ Optionボタン    一時停止、ストーリースキップ
 
 ## 使用した素材
 魔王魂 https://maou.audio/rule/
+
 OtoLogic https://otologic.jp/
 
 

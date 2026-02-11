@@ -83,16 +83,19 @@ Player::~Player()
 	
 }
 
-void Player::Update() {
+void Player::Update() 
+{
 
 	float deltaTimeSec = GetDeltaTime() * 0.001f;
 	
 	if (!stop) {
 
+		// 一時保存からフィーバーゲージに少しずつチャージ
 		feverStocks.remove_if([](Player::FEVER_STOCK& feverStock) {
 			return (feverStock.hold == 1.0f && feverStock.amount <= 0.0f);
 		});
 		for (Player::FEVER_STOCK& feverStock : feverStocks) {
+			// hold = 破片がゲージUIに到達するまで
 			if (feverStock.hold == 1.0f) {
 				float charage = min(FEVER_STOCK_CHARAGE_SPEED * deltaTimeSec, feverStock.amount);
 				feverStock.amount -= charage;
@@ -100,7 +103,6 @@ void Player::Update() {
 			}
 			feverStock.hold.IncreaseValue(GetDeltaTime());
 		}
-
 
 		if (resetVelocity) {
 			velocity = {};
@@ -133,13 +135,11 @@ void Player::Update() {
 			F3 forward = Rotate({ 0.0f, 0.0f, 1.0f }, rotate);
 			F3 upper = Rotate({ 0.0f, 1.0f, 0.0f }, rotate);
 
-
 			forward = Lerp(forward, Normalize(gravity.forward + Rotate({ 0.0f, 0.0f, 3.0f }, surfaceAlign.rotate)), deltaTimeSec * 6.0f);
 			upper = Lerp(upper, Normalize(gravity.upper + Rotate({ 0.0f, 3.0f, 0.0f }, surfaceAlign.rotate)), deltaTimeSec * 6.0f);
 			
 			rotate = Quaternion(forward, upper);
 
-			
 		}
 		else {
 			// 水面以上
@@ -165,7 +165,6 @@ void Player::Update() {
 			splashEffect.object->position = position + Rotate(splashEffect.offset, rotate);
 		}
 		
-		
 		// 減速
 		float maxVelocity = CONFIG.PLAYER_MAX_VELOCITY;
 		if (fever) {
@@ -180,6 +179,7 @@ void Player::Update() {
 		velocity.y *= 1.0f - min(decelerationConstant / fabsf(velocity.y), 1.0f);
 		velocity.z *= 1.0f - min(decelerationConstant / fabsf(velocity.z), 1.0f);
 
+		// 着水SE
 		if (SESwash.IsFinished()) {
 			swash = false;
 		}
@@ -227,8 +227,10 @@ void Player::Update() {
 	UpdateWorldCollisionUnits();
 }
 
-void Player::Draw() {
+void Player::Draw() 
+{
 	
+	// 左右に傾けるアニメーション
 	if (pan < 0.0f) {
 		DrawModel(boat, { {leftAnim, leftAnim->rawAnimation->frames * abs(pan) }}, position, size, rotate, color);
 	}
@@ -239,7 +241,7 @@ void Player::Draw() {
 		DrawModel(boat, position, size, rotate, color);
 	}
 	
-
+	// ブースター点火アニメーション
 	if (feverTransit > 0.0f) {
 		GetRenderer()->SetDepthState(DEPTH_STATE_NO_WRITE);
 		GetRenderer()->SetBlendState(BLEND_STATE_ADD);
@@ -289,6 +291,7 @@ void Player::OnCollision(GameObject* gameObject, const std::list<COLLISION_PAIR>
 		if (surfaceAlign.depth < CONFIG.SURFACE_THICKNESS * ((fever) ? 3.0f : 1.0f)) {
 
 			if (surfaceAlign.depth > 0.0f && velocity.y < -CONFIG.SPLASH_MIN_VELOCITY * 2.0f && !swash) {
+				// 着水SE
 				SESwash.Play();
 				swash = true;
 			}
@@ -318,8 +321,8 @@ void Player::OnCollision(GameObject* gameObject, const std::list<COLLISION_PAIR>
 		if (!((FeverPiece*)gameObject)->GetDestory()) {
 			float h = GetScreenHeight() * 0.5f;
 
-			// 一旦別枠にストックして、
-			// 時間差でチャージする
+			// チャージ量を一時保存に追加して、
+			// 時間差で少しずつチャージする
 			feverStocks.push_back({
 				timeGetTime(),
 				scene->GetCurrentCamera()->GetScreenPosition(position), // 取得時の画面上の2D座標
@@ -333,7 +336,7 @@ void Player::OnCollision(GameObject* gameObject, const std::list<COLLISION_PAIR>
 					F2{ ((float)rand() / RAND_MAX) * h * ((rand() % 2) ? 1.0f : -1.0f), ((float)rand() / RAND_MAX) * h * ((rand() % 2) ? 1.0f : -1.0f) },
 					F2{ ((float)rand() / RAND_MAX) * h * ((rand() % 2) ? 1.0f : -1.0f), ((float)rand() / RAND_MAX) * h * ((rand() % 2) ? 1.0f : -1.0f) }
 				},
-				1.0f / CONFIG.FEVER_AMOUNT_MAX * CONFIG.FEVER_TIME
+				1.0f / CONFIG.FEVER_AMOUNT_MAX * CONFIG.FEVER_TIME // チャージ量
 			});
 		}
 	}

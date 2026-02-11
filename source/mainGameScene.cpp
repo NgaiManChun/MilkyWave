@@ -821,7 +821,6 @@ namespace MainGameScene {
 		DrawModel(background, currentCamera->GetPosition());
 		renderer->SetDepthState(DEPTH_STATE_ENABLE);
 
-		//Scene::Draw();
 		LAYER_TYPE currentLayerType = LAYER_TYPE_NONE;
 		for (auto& gameObject : gameObjects) {
 			if (!gameObject->enable || gameObject->layer >= LAYER_2D) continue;
@@ -868,7 +867,6 @@ namespace MainGameScene {
 				{ 1.0f, 1.0f, 1.0f, 1.0f }
 			);
 
-			//renderer->SetBlendState(BLEND_STATE_ADD);
 			for (int i = 0; i < feverEffects.size(); i++) {
 				DrawQuad(
 					effectRenderTarget->texture,
@@ -878,7 +876,6 @@ namespace MainGameScene {
 					feverEffects[i].color
 				);
 			}
-			//renderer->SetBlendState(BLEND_STATE_ALPHA);
 		}
 
 		renderer->ApplyCamera(currentCamera2D);
@@ -889,14 +886,6 @@ namespace MainGameScene {
 		}
 		
 	}
-
-	// =======================================================
-	// レイヤータイプの定義
-	// =======================================================
-	/*LAYER_TYPE MainGameScene::GetLayerType(int layer)
-	{
-		return Scene::GetLayerType(layer);
-	}*/
 
 	void MainGameScene::SortGameObjects()
 	{

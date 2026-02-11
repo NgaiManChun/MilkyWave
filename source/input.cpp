@@ -130,7 +130,7 @@ std::wstring GetInputLabel(const std::wstring& placeholder)
 void ConnectDualSense() {
     dualSenseHandle = GetControllerHandle(CONTROLLER_TYPE_DUALSENSE);
     if (dualSenseHandle != INVALID_HANDLE_VALUE) {
-        // プロコンと違って特にセットアップ要らないらしい
+        // プロコンと違って特にセットアップ要らない
         dualSenseAcceSensitivity = GetDualSenseSensitivity(dualSenseHandle);
     }
     else {
@@ -144,6 +144,7 @@ void UpdateInput()
     memcpy(&lastInputs, &currentInputs, sizeof(INPUT_STATE));
     memset(&currentInputs, 0, sizeof(INPUT_STATE));
 
+    // 接続成功した場合、スレッドをdelete
     if (connectProcon && !connectingProcon.load(std::memory_order_relaxed)) {
         delete connectProcon;
         connectProcon = nullptr;
@@ -152,10 +153,14 @@ void UpdateInput()
         delete connectDualSense;
         connectDualSense = nullptr;
     }
+
+
     if (proconHandle) {
         BYTE report[256];
         DWORD bytesRead;
         if (ReadFile(proconHandle, report, sizeof(report), &bytesRead, NULL)) {
+
+            // プロコンのステート取得
             if (report[0] == 0x30) {
 
                 int acceX = (report[14] << 8) | report[13];
@@ -218,10 +223,14 @@ void UpdateInput()
             connectProcon->detach();
         }
     }
+
+
     if (dualSenseHandle) {
         BYTE report[256];
         DWORD bytesRead;
         if (ReadFile(dualSenseHandle, report, sizeof(report), &bytesRead, NULL)) {
+
+            // DualSenseのステート取得
             if (report[0] == 0x01) {
 
                 int acceX = (report[23] << 8) | report[22];
@@ -231,7 +240,6 @@ void UpdateInput()
                 if (acceX > 0x7FFF) acceX -= 0x10000;
                 if (acceY > 0x7FFF) acceY -= 0x10000;
                 if (acceZ > 0x7FFF) acceZ -= 0x10000;
-
 
                 currentInputs.analog[ANALOG_STATE_ACCE_X] = -(float)acceX / dualSenseAcceSensitivity.x;
                 currentInputs.analog[ANALOG_STATE_ACCE_Y] = -(float)acceY / dualSenseAcceSensitivity.y;
@@ -291,52 +299,55 @@ void UpdateInput()
         }
     }
 
-    XINPUT_STATE state;
-    ZeroMemory(&state, sizeof(XINPUT_STATE));
+    // XInputコントローラー
+    {
+        XINPUT_STATE state;
+        ZeroMemory(&state, sizeof(XINPUT_STATE));
 
-    DWORD dwResult = XInputGetState(0, &state);
+        DWORD dwResult = XInputGetState(0, &state);
 
-    if (dwResult == ERROR_SUCCESS) {
-        xInputConnected = true;
+        if (dwResult == ERROR_SUCCESS) {
+            xInputConnected = true;
 
-        currentInputs.buttons[BUTTON_STATE_0] = currentInputs.buttons[BUTTON_STATE_0] |
-            (bool)((state.Gamepad.wButtons & XINPUT_GAMEPAD_DPAD_UP)) |
-            (bool)((state.Gamepad.wButtons & XINPUT_GAMEPAD_DPAD_DOWN)) << 1 |
-            (bool)((state.Gamepad.wButtons & XINPUT_GAMEPAD_DPAD_LEFT)) << 2 |
-            (bool)((state.Gamepad.wButtons & XINPUT_GAMEPAD_DPAD_RIGHT)) << 3 |
-            (bool)((state.Gamepad.wButtons & XINPUT_GAMEPAD_A)) << 4 |
-            (bool)((state.Gamepad.wButtons & XINPUT_GAMEPAD_B)) << 5 |
-            (bool)((state.Gamepad.wButtons & XINPUT_GAMEPAD_START)) << 6 |
-            (bool)((state.Gamepad.wButtons & XINPUT_GAMEPAD_BACK)) << 7;
+            currentInputs.buttons[BUTTON_STATE_0] = currentInputs.buttons[BUTTON_STATE_0] |
+                (bool)((state.Gamepad.wButtons & XINPUT_GAMEPAD_DPAD_UP)) |
+                (bool)((state.Gamepad.wButtons & XINPUT_GAMEPAD_DPAD_DOWN)) << 1 |
+                (bool)((state.Gamepad.wButtons & XINPUT_GAMEPAD_DPAD_LEFT)) << 2 |
+                (bool)((state.Gamepad.wButtons & XINPUT_GAMEPAD_DPAD_RIGHT)) << 3 |
+                (bool)((state.Gamepad.wButtons & XINPUT_GAMEPAD_A)) << 4 |
+                (bool)((state.Gamepad.wButtons & XINPUT_GAMEPAD_B)) << 5 |
+                (bool)((state.Gamepad.wButtons & XINPUT_GAMEPAD_START)) << 6 |
+                (bool)((state.Gamepad.wButtons & XINPUT_GAMEPAD_BACK)) << 7;
 
-        if (state.Gamepad.sThumbLX > XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE)
-        {
-            currentInputs.analog[ANALOG_STATE_LEFT_X] = (float)state.Gamepad.sThumbLX / 32767.0f;
-        }
-        else if(state.Gamepad.sThumbLX < -XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE) 
-        {
-            currentInputs.analog[ANALOG_STATE_LEFT_X] = (float)state.Gamepad.sThumbLX / 32768.0f;
+            if (state.Gamepad.sThumbLX > XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE)
+            {
+                currentInputs.analog[ANALOG_STATE_LEFT_X] = (float)state.Gamepad.sThumbLX / 32767.0f;
+            }
+            else if (state.Gamepad.sThumbLX < -XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE)
+            {
+                currentInputs.analog[ANALOG_STATE_LEFT_X] = (float)state.Gamepad.sThumbLX / 32768.0f;
+            }
+            else {
+                currentInputs.analog[ANALOG_STATE_LEFT_X] = 0.0f;
+            }
+
+            if (state.Gamepad.sThumbLY > XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE)
+            {
+                currentInputs.analog[ANALOG_STATE_LEFT_Y] = (float)state.Gamepad.sThumbLY / 32767.0f;
+            }
+            else if (state.Gamepad.sThumbLY < -XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE)
+            {
+                currentInputs.analog[ANALOG_STATE_LEFT_Y] = (float)state.Gamepad.sThumbLY / 32768.0f;
+            }
+            else {
+                currentInputs.analog[ANALOG_STATE_LEFT_Y] = 0.0f;
+            }
         }
         else {
-            currentInputs.analog[ANALOG_STATE_LEFT_X] = 0.0f;
-        }
-
-        if (state.Gamepad.sThumbLY > XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE)
-        {
-            currentInputs.analog[ANALOG_STATE_LEFT_Y] = (float)state.Gamepad.sThumbLY / 32767.0f;
-        }
-        else if (state.Gamepad.sThumbLY < -XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE)
-        {
-            currentInputs.analog[ANALOG_STATE_LEFT_Y] = (float)state.Gamepad.sThumbLY / 32768.0f;
-        }
-        else {
-            currentInputs.analog[ANALOG_STATE_LEFT_Y] = 0.0f;
+            xInputConnected = false;
         }
     }
-    else {
-        xInputConnected = false;
-    }
-
+    
     currentInputs.buttons[BUTTON_STATE_0] = currentInputs.buttons[BUTTON_STATE_0] |
         Keyboard_IsKeyDown(KK_W) |
         Keyboard_IsKeyDown(KK_S) << 1 |

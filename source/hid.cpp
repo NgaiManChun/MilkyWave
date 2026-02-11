@@ -42,7 +42,7 @@ HANDLE GetControllerHandle(CONTROLLER_TYPE type) {
                 GENERIC_READ | GENERIC_WRITE,
                 FILE_SHARE_READ | FILE_SHARE_WRITE,
                 NULL, OPEN_EXISTING,
-                FILE_ATTRIBUTE_NORMAL, //FILE_FLAG_OVERLAPPED,
+                FILE_ATTRIBUTE_NORMAL,
                 NULL
             );
             if (hDevice != INVALID_HANDLE_VALUE) {

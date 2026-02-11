@@ -315,6 +315,8 @@ namespace StageSelectScene {
 		Scene::Uninit();
 		textObjs.clear();
 		stageData.clear();
+
+		// ステージロードスレッドを終了させる
 		if (loadThread) {
 			if (loadThread->joinable()) {
 				loadThread->join();
@@ -327,6 +329,8 @@ namespace StageSelectScene {
 			delete loadThread;
 		}
 		loadThread = nullptr;
+
+		// プレビューロードスレッドを終了させる
 		if (previewThread) {
 			if (previewThread->joinable()) {
 				previewThread->join();

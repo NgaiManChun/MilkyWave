@@ -90,7 +90,7 @@ void Player::Update()
 	
 	if (!stop) {
 
-		// 一時保存からフィーバーゲージに少しずつチャージ
+		// 一時保存からフィーバーゲージに少しずつチャージさせる
 		feverStocks.remove_if([](Player::FEVER_STOCK& feverStock) {
 			return (feverStock.hold == 1.0f && feverStock.amount <= 0.0f);
 		});

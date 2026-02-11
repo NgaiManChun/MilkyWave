@@ -433,8 +433,8 @@ namespace StageSelectScene {
 		F2 screenCenter = GetScreenCenter();
 		F2 screenSize = GetScreenSize();
 		
+		// 操作方法の表示
 		{
-			// 操作方法の表示
 			labelSelect->color.w = flip;
 			labelHints->color.w = flip;
 

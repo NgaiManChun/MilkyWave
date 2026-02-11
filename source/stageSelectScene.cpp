@@ -386,7 +386,10 @@ namespace StageSelectScene {
 			}
 		}
 		
-		if (!stageLoading && !stageLoaded.load(std::memory_order_relaxed) && !InTransition() && (IsInputTrigger(INPUT_START) || IsInputTrigger(INPUT_OK))) {
+		if (!stageLoading && !stageLoaded.load(std::memory_order_relaxed) && 
+			!InTransition() && 
+			(IsInputTrigger(INPUT_START) || IsInputTrigger(INPUT_OK))
+			) {
 			// ステージ決定
 			
 			SEOK->Play();

@@ -181,7 +181,6 @@ namespace StageSelectScene {
 		);
 		labelHints->color = { 0.0f, 0.0f, 0.0f, 0.0f };
 
-
 		// ステージリスト読み込む
 		{
 			D_TABLE table;
@@ -397,45 +396,21 @@ namespace StageSelectScene {
 			roll = 1.0f;
 			stageLoading = true;
 
-			// 背景
+			// ステージ初期化設定
 			SetCommonString("stage_key", stageData[currentIndex].stage);
-
-			// 背景
 			SetCommonString("course_background", stageData[currentIndex].background);
-
-			// BGM
 			SetCommonString("course_bgm", stageData[currentIndex].bgm);
-
-			// レール
 			SetCommonString("course_rail", stageData[currentIndex].rail);
-
-			// コース範囲判定
 			SetCommonString("course_collision", stageData[currentIndex].collision);
-
-			// 波
 			SetCommonString("course_surface", stageData[currentIndex].surface);
-
-			// オブジェクト配置
 			SetCommonString("course_items", stageData[currentIndex].items);
-
-			// ギャラリー
 			SetCommonString("course_gallery", stageData[currentIndex].gallery);
-
-			// ギャラリーアニメーション
 			SetCommonString("course_gallery_animation", stageData[currentIndex].gallery_animation);
-
-			// 各ランク最低時間
 			SetCommonFloat("course_rank_s_time", stageData[currentIndex].rank_s_time);
 			SetCommonFloat("course_rank_a_time", stageData[currentIndex].rank_a_time);
 			SetCommonFloat("course_rank_b_time", stageData[currentIndex].rank_b_time);
-
-			// ジャイロ設定
 			SetCommonBool("gyro", gyro);
-
-			// プロローグ
 			SetCommonString("prologue", stageData[currentIndex].prologue);
-
-			// エピローグ
 			SetCommonString("epilogue", stageData[currentIndex].epilogue);
 
 			// メインゲームシーンをプリロード

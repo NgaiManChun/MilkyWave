@@ -314,11 +314,20 @@ void Player::OnCollision(GameObject* gameObject, const std::list<COLLISION_PAIR>
 		}
 	}
 	else if (IS_TYPE(*gameObject, FeverPiece)) {
+		// フィーバーゲージチャージ
 		if (!((FeverPiece*)gameObject)->GetDestory()) {
 			float h = GetScreenHeight() * 0.5f;
+
+			// 一旦別枠にストックして、
+			// 時間差でチャージする
 			feverStocks.push_back({
 				timeGetTime(),
-				scene->GetCurrentCamera()->GetScreenPosition(position),
+				scene->GetCurrentCamera()->GetScreenPosition(position), // 取得時の画面上の2D座標
+				// ベジェ曲線のコントロール点(2D)を生成し、
+				// 破片をゲージUIに向けて飛ばす
+				// point0: 取得した座標
+				// point1: コントロール点
+				// point2: ゲージUI座標
 				{
 					F2{ ((float)rand() / RAND_MAX) * h * ((rand() % 2) ? 1.0f : -1.0f), ((float)rand() / RAND_MAX) * h * ((rand() % 2) ? 1.0f : -1.0f) },
 					F2{ ((float)rand() / RAND_MAX) * h * ((rand() % 2) ? 1.0f : -1.0f), ((float)rand() / RAND_MAX) * h * ((rand() % 2) ? 1.0f : -1.0f) },

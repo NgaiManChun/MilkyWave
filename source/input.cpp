@@ -152,72 +152,72 @@ void UpdateInput()
         delete connectDualSense;
         connectDualSense = nullptr;
     }
-    //if (proconHandle) {
-    //    BYTE report[256];
-    //    DWORD bytesRead;
-    //    if (ReadFile(proconHandle, report, sizeof(report), &bytesRead, NULL)) {
-    //        if (report[0] == 0x30) {
+    if (proconHandle) {
+        BYTE report[256];
+        DWORD bytesRead;
+        if (ReadFile(proconHandle, report, sizeof(report), &bytesRead, NULL)) {
+            if (report[0] == 0x30) {
 
-    //            int acceX = (report[14] << 8) | report[13];
-    //            int acceY = (report[16] << 8) | report[15];
-    //            int acceZ = (report[18] << 8) | report[17];
+                int acceX = (report[14] << 8) | report[13];
+                int acceY = (report[16] << 8) | report[15];
+                int acceZ = (report[18] << 8) | report[17];
 
-    //            if (acceX > 0x7FFF) acceX -= 0x10000;
-    //            if (acceY > 0x7FFF) acceY -= 0x10000;
-    //            if (acceZ > 0x7FFF) acceZ -= 0x10000;
+                if (acceX > 0x7FFF) acceX -= 0x10000;
+                if (acceY > 0x7FFF) acceY -= 0x10000;
+                if (acceZ > 0x7FFF) acceZ -= 0x10000;
 
-    //            currentInputs.analog[ANALOG_STATE_ACCE_Z] = -(float)acceX / proconAcceSensitivity.x;
-    //            currentInputs.analog[ANALOG_STATE_ACCE_X] = (float)acceY / proconAcceSensitivity.y;
-    //            currentInputs.analog[ANALOG_STATE_ACCE_Y] = -(float)acceZ / proconAcceSensitivity.z;
+                currentInputs.analog[ANALOG_STATE_ACCE_Z] = -(float)acceX / proconAcceSensitivity.x;
+                currentInputs.analog[ANALOG_STATE_ACCE_X] = (float)acceY / proconAcceSensitivity.y;
+                currentInputs.analog[ANALOG_STATE_ACCE_Y] = -(float)acceZ / proconAcceSensitivity.z;
 
 
-    //            int lStickH = report[6] | ((report[7] & 0x0f) << 8) - 0x7f5;
-    //            int lStickV = (report[7] >> 4) | (report[8] << 4) - 0x7db;
-    //            float lStickHNormalization = 0.0f;
-    //            float lStickVNormalization = 0.0f;
-    //            if (lStickH < 0) {
-    //                lStickHNormalization = (float)lStickH / 0x61b;
-    //            }
-    //            else {
-    //                lStickHNormalization = (float)lStickH / 0x62f;
-    //            }
-    //            if (lStickV < 0) {
-    //                lStickVNormalization = (float)lStickV / 0x645;
-    //            }
-    //            else {
-    //                lStickVNormalization = (float)lStickV / 0x643;
-    //            }
+                int lStickH = report[6] | ((report[7] & 0x0f) << 8) - 0x7f5;
+                int lStickV = (report[7] >> 4) | (report[8] << 4) - 0x7db;
+                float lStickHNormalization = 0.0f;
+                float lStickVNormalization = 0.0f;
+                if (lStickH < 0) {
+                    lStickHNormalization = (float)lStickH / 0x61b;
+                }
+                else {
+                    lStickHNormalization = (float)lStickH / 0x62f;
+                }
+                if (lStickV < 0) {
+                    lStickVNormalization = (float)lStickV / 0x645;
+                }
+                else {
+                    lStickVNormalization = (float)lStickV / 0x643;
+                }
 
-    //            currentInputs.analog[ANALOG_STATE_LEFT_X] = lStickHNormalization;
-    //            currentInputs.analog[ANALOG_STATE_LEFT_Y] = lStickVNormalization;
-    //            
+                currentInputs.analog[ANALOG_STATE_LEFT_X] = lStickHNormalization;
+                currentInputs.analog[ANALOG_STATE_LEFT_Y] = lStickVNormalization;
+                
 
-    //            currentInputs.buttons[BUTTON_STATE_0] = currentInputs.buttons[BUTTON_STATE_0] |
-    //                (bool)((report[5] & 0x02)) |
-    //                (bool)((report[5] & 0x01)) << 1 |
-    //                (bool)((report[5] & 0x08)) << 2 |
-    //                (bool)((report[5] & 0x04)) << 3 |
-    //                (bool)((report[3] & 0x08)) << 4 |
-    //                (bool)((report[3] & 0x04)) << 5 |
-    //                (bool)((report[4] & 0x02)) << 6 |
-    //                (bool)((report[4] & 0x01)) << 7;
-    //        }
-    //    }
-    //    else {
-    //        // 接続ロスト
-    //        CloseHandle(proconHandle);
-    //        proconHandle = nullptr;
-    //    }
-    //}
-    //else {
-    //    // 再接続を試みる
-    //    if (!connectProcon && timeGetTime() - lastProconConnectTime > PRO_CON_RECONNECT_TIMEOUT) {
-    //        lastProconConnectTime = timeGetTime();
-    //        connectingProcon.store(true, std::memory_order_relaxed);
-    //        connectProcon = new std::thread(ConnectProcon);
-    //        connectProcon->detach();
-    //    }
-    //}
+                currentInputs.buttons[BUTTON_STATE_0] = currentInputs.buttons[BUTTON_STATE_0] |
+                    (bool)((report[5] & 0x02)) |
+                    (bool)((report[5] & 0x01)) << 1 |
+                    (bool)((report[5] & 0x08)) << 2 |
+                    (bool)((report[5] & 0x04)) << 3 |
+                    (bool)((report[3] & 0x08)) << 4 |
+                    (bool)((report[3] & 0x04)) << 5 |
+                    (bool)((report[4] & 0x02)) << 6 |
+                    (bool)((report[4] & 0x01)) << 7;
+            }
+        }
+        else {
+            // 接続ロスト
+            CloseHandle(proconHandle);
+            proconHandle = nullptr;
+        }
+    }
+    else {
+        // 再接続を試みる
+        if (!connectProcon && timeGetTime() - lastProconConnectTime > PRO_CON_RECONNECT_TIMEOUT) {
+            lastProconConnectTime = timeGetTime();
+            connectingProcon.store(true, std::memory_order_relaxed);
+            connectProcon = new std::thread(ConnectProcon);
+            connectProcon->detach();
+        }
+    }
     if (dualSenseHandle) {
         BYTE report[256];
         DWORD bytesRead;

@@ -356,7 +356,7 @@ namespace StageSelectScene {
 	void StageSelectScene::Update()
 	{
 		if (!InTransition() && stageLoaded.load(std::memory_order_relaxed)) {
-			// ステージロード完了
+			//メインゲームシーンのプリロード完了
 			// メインゲームに移動する
 			stageLoading = false;
 			txtLoading->enable = false;
@@ -435,6 +435,7 @@ namespace StageSelectScene {
 			// エピローグ
 			SetCommonString("epilogue", stageData[currentIndex].epilogue);
 
+			// メインゲームシーンをプリロード
 			Scene* scene = LoadScene("main_game");
 			MainGameScene::MainGameScene* mainGameScene = (MainGameScene::MainGameScene*)scene;
 			if (mainGameScene) {

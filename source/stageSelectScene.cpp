@@ -69,7 +69,7 @@ namespace StageSelectScene {
 		int currentIndex;
 
 		GameObjectQuad* background;
-		GameObjectQuad* dev;
+		GameObjectQuad* divsion;
 		GameObjectQuad* preview;
 		GameObjectText* txtLoading;
 		GameObjectAudio* SECursor;
@@ -94,7 +94,7 @@ namespace StageSelectScene {
 		void Init() override;
 		void Uninit() override;
 		void Update() override;
-		void Draw() override;
+		//void Draw() override;
 		//LAYER_TYPE GetLayerType(int layer) override;
 	};
 
@@ -139,7 +139,7 @@ namespace StageSelectScene {
 			LAYER_BG
 		);
 
-		dev = AddGameObject(
+		divsion = AddGameObject(
 			GameObjectQuad(
 				LoadTexture(TEXTURE_WHITE),
 				{ titleWidth * 2.0f, screenSize.y },
@@ -147,7 +147,7 @@ namespace StageSelectScene {
 			),
 			LAYER_DEV
 		);
-		dev->color = { 1.0f, 0.7843f, 0.0431f, 1.0f };
+		divsion->color = { 1.0f, 0.7843f, 0.0431f, 1.0f };
 
 		labelSelect = AddGameObject(
 			GameObjectText(
@@ -268,7 +268,6 @@ namespace StageSelectScene {
 			GameObjectAudio(LoadAudio(ASSET.SE_OK), false)
 		);
 		
-		// currentIndex = 0;
 		roll = 1.0f;
 		flip = 0.0f;
 		previewFade = 0.0f;
@@ -292,7 +291,6 @@ namespace StageSelectScene {
 		preview = AddGameObject(
 			GameObjectQuad(
 				previewScene->GetRenderTarget()->texture, 
-				//LoadTexture(TEXTURE_WHITE),
 				{ screenSize.x - titleWidth, screenSize.y },
 				{ titleWidth * 0.5f, 0.0f }
 			), LAYER_PREVIEW
@@ -354,12 +352,16 @@ namespace StageSelectScene {
 	void StageSelectScene::Update()
 	{
 		if (!InTransition() && stageLoaded.load(std::memory_order_relaxed)) {
+			// ステージロード完了
+			// メインゲームに移動する
 			stageLoading = false;
 			txtLoading->enable = false;
 			SceneTransit("main_game", "star");
 			return;
 		}
+
 		if (!stageLoading && !stageLoaded.load(std::memory_order_relaxed)) {
+			// 上下スクロール
 			if (roll == 1.0f) {
 				if (IsInputDown(INPUT_DOWN) && currentIndex < stageData.size() - 1) {
 					SECursor->Play();
@@ -381,6 +383,8 @@ namespace StageSelectScene {
 		}
 		
 		if (!stageLoading && !stageLoaded.load(std::memory_order_relaxed) && !InTransition() && (IsInputTrigger(INPUT_START) || IsInputTrigger(INPUT_OK))) {
+			// ステージ決定
+			
 			SEOK->Play();
 			flip = 1.0f;
 			roll = 1.0f;
@@ -439,128 +443,122 @@ namespace StageSelectScene {
 			}
 		}
 		else if (!stageLoading && !InTransition() && IsInputTrigger(INPUT_CANCEL)) {
+			// タイトルに戻る
 			SceneTransit("title", "star");
 		}
 		
 		F2 screenCenter = GetScreenCenter();
 		F2 screenSize = GetScreenSize();
-
-		labelSelect->color.w = flip;
-		labelHints->color.w = flip;
-
-		if (IsInputTrigger(INPUT_LEFT) || IsInputTrigger(INPUT_RIGHT)) {
-			gyro = !gyro;
-			SetCommonBool("gyro", gyro);
-		}
-		std::wstring label = GetInputLabel(L"↑") + GetInputLabel(L"↓") + L"選択 ";
-		label += GetInputLabel(L"{OK}") + L"決定 ";
-		label += GetInputLabel(L"{Cancel}") + L"戻る ";
-
-		if (HasProcon() || HasDualSense()) {
-			label += L"\nジャイロ：";
-			if (gyro) {
-				label += GetInputLabel(L"←") + L" On  " + GetInputLabel(L"→");
-			}
-			else {
-				label += GetInputLabel(L"←") + L" Off  " + GetInputLabel(L"→");
-			}
-		}
-		else if(gyro){
-			gyro = false;
-			SetCommonBool("gyro", gyro);
-		}
-
 		
-		labelHints->SetValue(label);
+		{
+			// 操作方法の表示
+			labelSelect->color.w = flip;
+			labelHints->color.w = flip;
 
-		for (int i = 0; i < textObjs.size(); i++) {
-			
-			float sub = (float)currentIndex - (1.0f - roll) * rollDirect - (float)i;
-			float absSub = abs(sub);
-			textObjs[i]->position = currentPosition + F3{0.0f, 300.0f * 0.3f * sub};
-			textObjs[i]->size = currentSize * (1.0f - 0.3f * absSub);
-			//textObjs[i]->color.w = (1.0f - 0.3f * abs(sub)) * flip;
-			textObjs[i]->color = { 0.3f - absSub, 0.6f - absSub, 1.0f - absSub, (1.0f - 0.3f * absSub) * flip };
+			if (IsInputTrigger(INPUT_LEFT) || IsInputTrigger(INPUT_RIGHT)) {
+				gyro = !gyro;
+				SetCommonBool("gyro", gyro);
+			}
+			std::wstring label = GetInputLabel(L"↑") + GetInputLabel(L"↓") + L"選択 ";
+			label += GetInputLabel(L"{OK}") + L"決定 ";
+			label += GetInputLabel(L"{Cancel}") + L"戻る ";
+
+			if (HasProcon() || HasDualSense()) {
+				label += L"\nジャイロ：";
+				if (gyro) {
+					label += GetInputLabel(L"←") + L" On  " + GetInputLabel(L"→");
+				}
+				else {
+					label += GetInputLabel(L"←") + L" Off  " + GetInputLabel(L"→");
+				}
+			}
+			else if (gyro) {
+				gyro = false;
+				SetCommonBool("gyro", gyro);
+			}
+
+			labelHints->SetValue(label);
+
+			for (int i = 0; i < textObjs.size(); i++) {
+
+				float sub = (float)currentIndex - (1.0f - roll) * rollDirect - (float)i;
+				float absSub = abs(sub);
+				textObjs[i]->position = currentPosition + F3{ 0.0f, 300.0f * 0.3f * sub };
+				textObjs[i]->size = currentSize * (1.0f - 0.3f * absSub);
+				textObjs[i]->color = { 0.3f - absSub, 0.6f - absSub, 1.0f - absSub, (1.0f - 0.3f * absSub) * flip };
+			}
 		}
-		
+
 		static Progress bgT{ 15000.0f, true };
 		background->uvOffset = background->uvRange * -bgT;
 
 		Scene::Update();
 
+		// 背景ロール
 		bgT.IncreaseValue(GetDeltaTime());
 		
-
 		if (!InTransition()) {
-			dev->position.x = screenSize.x * -0.5f - dev->size.x * 0.5f + easeOutElastic(flip) * dev->size.x * 0.5f;
+			// フリップ演出
+			divsion->position.x = screenSize.x * -0.5f - divsion->size.x * 0.5f + easeOutElastic(flip) * divsion->size.x * 0.5f;
 			flip.IncreaseValue(GetDeltaTime());
 		}
 
 		roll.IncreaseValue(GetDeltaTime());
 		
-		preview->color.w = previewFade;
+		// プレビュー
+		{
+			preview->color.w = previewFade;
 
-		if (previewThread && previewReady.load(std::memory_order_relaxed)) {
-			delete previewThread;
-			previewThread = nullptr;
-			if (previewIndex == currentIndex) {
-				previewChanged = false;
+			if (previewThread && previewReady.load(std::memory_order_relaxed)) {
+				// ロード完了
+				delete previewThread;
+				previewThread = nullptr;
+				if (previewIndex == currentIndex) {
+					previewChanged = false;
+				}
+				else {
+					previewReady.store(false, std::memory_order_release);
+				}
+
+			}
+
+			if (flip == 1.0f && previewChanged && !previewReady && !previewThread) {
+				// 今選択中のステージのプレビューを
+				// マルチスレッドでロードする
+				previewIndex = currentIndex;
+				previewThread = new std::thread([this](
+					const std::string background,
+					const std::string rail,
+					const std::string collision,
+					const std::string surface,
+					const std::string items,
+					const std::string camera
+					) {
+						previewScene->Lock();
+						while (previewScene->IsBusy()) {
+							Sleep(10);
+						}
+						previewScene->Uninit();
+						previewScene->LoadCourse(background, rail, collision, surface, items, camera);
+						previewScene->Unlock();
+						previewReady.store(true, std::memory_order_release);
+					},
+					stageData[currentIndex].background,
+					stageData[currentIndex].rail,
+					stageData[currentIndex].collision,
+					stageData[currentIndex].surface,
+					stageData[currentIndex].items,
+					stageData[currentIndex].camera
+				);
+				previewThread->detach();
+			}
+
+			if (previewReady.load(std::memory_order_relaxed)) {
+				previewFade.IncreaseValue(GetDeltaTime());
 			}
 			else {
-				previewReady.store(false, std::memory_order_release);
+				previewFade.IncreaseValue(-GetDeltaTime());
 			}
-			
-		}
-		if (flip == 1.0f && previewChanged && !previewReady && !previewThread) {
-			previewIndex = currentIndex;
-			previewThread = new std::thread([this](
-				const std::string background, 
-				const std::string rail, 
-				const std::string collision,
-				const std::string surface, 
-				const std::string items,
-				const std::string camera
-			) {
-				previewScene->Lock();
-				while (previewScene->IsBusy()) {
-					Sleep(10);
-				}
-				previewScene->Uninit();
-				previewScene->LoadCourse(background, rail, collision, surface, items, camera);
-				previewScene->Unlock();
-				previewReady.store(true, std::memory_order_release);
-			}, 
-				stageData[currentIndex].background, 
-				stageData[currentIndex].rail, 
-				stageData[currentIndex].collision,
-				stageData[currentIndex].surface, 
-				stageData[currentIndex].items,
-				stageData[currentIndex].camera
-			);
-			previewThread->detach();
-		}
-
-		if (previewReady.load(std::memory_order_relaxed)) {
-			previewFade.IncreaseValue(GetDeltaTime());
-		}
-		else {
-			previewFade.IncreaseValue(-GetDeltaTime());
 		}
 	}
-
-	// =======================================================
-	// 描画
-	// =======================================================
-	void StageSelectScene::Draw()
-	{
-		Scene::Draw();
-	}
-
-	// =======================================================
-	// レイヤータイプの定義
-	// =======================================================
-	/*LAYER_TYPE StageSelectScene::GetLayerType(int layer)
-	{
-		return Scene::GetLayerType(layer);
-	}*/
 }

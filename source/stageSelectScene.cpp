@@ -13,6 +13,14 @@ using namespace MG;
 
 namespace StageSelectScene {
 
+	// =======================================================
+	// ステージ選択シーン
+	// ・ステージ一覧表示
+	// ・入力で選択
+	// ・プレビュー表示
+	// ・選択後にメインゲームへ遷移
+	// =======================================================
+
 	static constexpr const char* STATE_LIST = "asset\\stage.csv";
 	static constexpr const char* TEXTURE_BAR = "asset\\texture\\bar2.png";
 	static constexpr const char* TEXTURE_WHITE = "asset\\texture\\white.png";
@@ -30,22 +38,22 @@ namespace StageSelectScene {
 	class StageSelectScene : public Scene {
 	public:
 		struct STAGE_DATA {
-			std::string stage;
-			std::string name;
-			std::string background;
-			std::string bgm;
-			std::string rail;
-			std::string collision;
-			std::string surface;
-			std::string items;
-			std::string camera;
-			std::string gallery;
+			std::string stage;        // ステージキー
+			std::string name;         // 表示名
+			std::string background;   // 背景
+			std::string bgm;          // BGM
+			std::string rail;         // レール
+			std::string collision;    // 当たり判定
+			std::string surface;      // 水面など
+			std::string items;        // 配置オブジェクト
+			std::string camera;       // プレビュー用カメラ
+			std::string gallery;      // ゴール後モデル
 			std::string gallery_animation;
-			float rank_s_time;
-			float rank_a_time;
-			float rank_b_time;
-			std::string prologue;
-			std::string epilogue;
+			float rank_s_time;        // Sランク時間
+			float rank_a_time;		  // Aランク時間
+			float rank_b_time;		  // Bランク時間	
+			std::string prologue;     // プロローグ
+			std::string epilogue;     // エピローグ
 		};
 		
 		static struct _CONFIG {
@@ -125,12 +133,17 @@ namespace StageSelectScene {
 	void StageSelectScene::Init()
 	{
 		Scene::Init();
-
+		
 		F2 screenSize = GetScreenSize();
 
 		currentPosition = { screenSize.x * -0.5f + titleWidth * 0.5f, 0.0f };
 		currentSize = { titleWidth - titlePadding - titlePadding, 70.0f };
 
+		// =======================================================
+		// UI初期化
+		// =======================================================
+
+		// 背景画像
 		background = AddGameObject(
 			GameObjectQuad(
 				LoadTexture(TEXTURE_SELECT_BG),
@@ -139,6 +152,7 @@ namespace StageSelectScene {
 			LAYER_BG
 		);
 
+		// 左側の区切りライン
 		divsion = AddGameObject(
 			GameObjectQuad(
 				LoadTexture(TEXTURE_WHITE),
@@ -149,6 +163,7 @@ namespace StageSelectScene {
 		);
 		divsion->color = { 1.0f, 0.7843f, 0.0431f, 1.0f };
 
+		// タイトル「ステージ選択」
 		labelSelect = AddGameObject(
 			GameObjectText(
 				L"ステージ選択",
@@ -165,6 +180,7 @@ namespace StageSelectScene {
 		);
 		labelSelect->color = { 0.0f, 0.0f, 0.0f, 0.0f };
 
+		// 操作説明
 		labelHints = AddGameObject(
 			GameObjectText(
 				L"↑↓選択 🅰決定 🅱戻る\nジャイロ：←オン→",
@@ -181,8 +197,11 @@ namespace StageSelectScene {
 		);
 		labelHints->color = { 0.0f, 0.0f, 0.0f, 0.0f };
 
-		// ステージリスト読み込む
+		// =======================================================
+		// ステージCSV読み込み
+		// =======================================================
 		{
+			// stage.csvを読み込み、STAGE_DATAとして保持
 			D_TABLE table;
 			D_KVTABLE keyValuePair;
 			ReadCSVFromPath(STATE_LIST, table);
@@ -191,6 +210,7 @@ namespace StageSelectScene {
 			stageData.reserve(table.size());
 			textObjs.reserve(table.size());
 
+			// 各ステージ名をUIテキストとして生成
 			int line = 0;
 			for (auto& row : keyValuePair) {
 
@@ -238,6 +258,9 @@ namespace StageSelectScene {
 			}
 		}
 
+		// =======================================================
+		// ローディング表示
+		// =======================================================
 		txtLoading = AddGameObject(
 			GameObjectText(
 				L"NOW LOADING...",
@@ -254,11 +277,15 @@ namespace StageSelectScene {
 		);
 		txtLoading->enable = false;
 		
+		// =======================================================
+		// BGM再生
+		// =======================================================
 		bgmScene = (BGMScene::BGMScene*)LoadScene("bgm");
 		bgmScene->SetCurrentScene(this);
 		bgmScene->SetPlaylist(this, { ASSET.BGM_TITLE });
 		bgmScene->Play(ASSET.BGM_TITLE);
 
+		// SE
 		SECursor = AddGameObject(
 			GameObjectAudio(LoadAudio(ASSET.SE_CURSOR_MOVE), false)
 		);
@@ -267,9 +294,14 @@ namespace StageSelectScene {
 			GameObjectAudio(LoadAudio(ASSET.SE_OK), false)
 		);
 		
+		// =======================================================
+		// 状態初期化
+		// =======================================================
 		roll = 1.0f;
 		flip = 0.0f;
 		previewFade = 0.0f;
+
+		// ジャイロ設定読み込み
 		if (IsContainBool("gyro")) {
 			gyro = GetCommonBool("gyro");
 		}
@@ -277,16 +309,24 @@ namespace StageSelectScene {
 			gyro = true;
 			SetCommonBool("gyro", gyro);
 		}
+
+		// 非同期ロードフラグ初期化
 		stageLoaded.store(false, std::memory_order_relaxed);;
 		loadThread = nullptr;
 
+		// =======================================================
+		// プレビューシーン準備
+		// =======================================================
+
 		previewChanged = true;
 		previewReady.store(false, std::memory_order_relaxed);
-
 		previewScene = (PreviewScene::PreviewScene*)LoadScene("preview");
+
+		// プレビュー用レンダーターゲット生成
 		previewRenderTarget = GetRenderer()->CreateRenderTarget(screenSize.x - titleWidth, screenSize.y);
 		previewScene->SetRenderTarget(previewRenderTarget);
 
+		// プレビュー表示用Quad
 		preview = AddGameObject(
 			GameObjectQuad(
 				previewScene->GetRenderTarget()->texture, 
@@ -354,18 +394,27 @@ namespace StageSelectScene {
 	// =======================================================
 	void StageSelectScene::Update()
 	{
+		// =======================================================
+		// ステージロード完了チェック
+		// =======================================================
+
 		if (!InTransition() && stageLoaded.load(std::memory_order_relaxed)) {
-			//メインゲームシーンのプリロード完了
-			// メインゲームに移動する
+
+			// ロード完了 → メインゲームへ遷移
 			stageLoading = false;
 			txtLoading->enable = false;
 			SceneTransit("main_game", "star");
 			return;
 		}
 
+		// =======================================================
+		// ステージ選択入力（上下）
+		// =======================================================
+
 		if (!stageLoading && !stageLoaded.load(std::memory_order_relaxed)) {
-			// 上下スクロール
 			if (roll == 1.0f) {
+
+				// 下へ移動
 				if (IsInputDown(INPUT_DOWN) && currentIndex < stageData.size() - 1) {
 					SECursor->Play();
 					currentIndex += 1;
@@ -374,6 +423,7 @@ namespace StageSelectScene {
 					previewChanged = true;
 					previewReady.store(false, std::memory_order_relaxed);
 				}
+				// 上へ移動
 				else if (IsInputDown(INPUT_UP) && currentIndex > 0) {
 					SECursor->Play();
 					currentIndex -= 1;
@@ -384,19 +434,22 @@ namespace StageSelectScene {
 				}
 			}
 		}
+
+		// =======================================================
+		// ステージ決定
+		// =======================================================
 		
 		if (!stageLoading && !stageLoaded.load(std::memory_order_relaxed) && 
 			!InTransition() && 
 			(IsInputTrigger(INPUT_START) || IsInputTrigger(INPUT_OK))
 			) {
-			// ステージ決定
 			
 			SEOK->Play();
 			flip = 1.0f;
 			roll = 1.0f;
 			stageLoading = true;
 
-			// ステージ初期化設定
+			// 選択中ステージ情報をグローバルにセット
 			SetCommonString("stage_key", stageData[currentIndex].stage);
 			SetCommonString("course_background", stageData[currentIndex].background);
 			SetCommonString("course_bgm", stageData[currentIndex].bgm);
@@ -413,7 +466,7 @@ namespace StageSelectScene {
 			SetCommonString("prologue", stageData[currentIndex].prologue);
 			SetCommonString("epilogue", stageData[currentIndex].epilogue);
 
-			// メインゲームシーンをプリロード
+			// メインゲームを別スレッドでロード
 			Scene* scene = LoadScene("main_game");
 			MainGameScene::MainGameScene* mainGameScene = (MainGameScene::MainGameScene*)scene;
 			if (mainGameScene) {
@@ -433,7 +486,10 @@ namespace StageSelectScene {
 		F2 screenCenter = GetScreenCenter();
 		F2 screenSize = GetScreenSize();
 		
+
+		// =======================================================
 		// 操作方法の表示
+		// =======================================================
 		{
 			labelSelect->color.w = flip;
 			labelHints->color.w = flip;
@@ -488,7 +544,9 @@ namespace StageSelectScene {
 
 		roll.IncreaseValue(GetDeltaTime());
 		
-		// プレビュー
+		// =======================================================
+		// プレビュー更新
+		// =======================================================
 		{
 			preview->color.w = previewFade;
 
@@ -536,6 +594,7 @@ namespace StageSelectScene {
 				previewThread->detach();
 			}
 
+			// フェード制御
 			if (previewReady.load(std::memory_order_relaxed)) {
 				previewFade.IncreaseValue(GetDeltaTime());
 			}

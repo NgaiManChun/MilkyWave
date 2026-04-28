@@ -12,6 +12,16 @@
 using namespace MG;
 
 namespace ResultScene {
+
+	// =======================================================
+	// リザルトシーン
+	// ・クリアタイム表示
+	// ・ベストタイム更新
+	// ・ランク判定
+	// ・ランク演出、キャラ演出
+	// ・ステージ選択へ戻る
+	// =======================================================
+
 	static constexpr const char* WHITE_TEXTURE = "asset\\texture\\white.png";
 	static constexpr const int LAYER_BACKGROUND = LAYER_2D + 1;
 	static constexpr const int LAYER_ILLUSTRATION = LAYER_BACKGROUND + 1;
@@ -161,22 +171,34 @@ namespace ResultScene {
 	void ResultScene::Init()
 	{
 		Scene::Init();
+		F2 screenSize = GetScreenSize();
 
+		// =======================================================
+		// 共通テクスチャ読み込み
+		// =======================================================
 		whiteTex = LoadTexture(WHITE_TEXTURE);
 		reflectionTexture = LoadTexture(ASSET.REFLECTION_TEXTURE);
 		miiShadowTexture = LoadTexture(ASSET.RESULT_MII_SHADOW_TEXTURE);
 
-		F2 screenSize = GetScreenSize();
 
+		// =======================================================
+		// ベストタイム読み込み・更新判定
+		// =======================================================
+
+		// メインゲームから渡されたクリアタイムを取得
 		float resultTime = GetCommonFloat("result_time");
-		
+
 		std::string stageKey = GetCommonString("stage_key");
 		std::string filename = "best_" + stageKey + ".mgd";
 		float best = 0.0f;
+
+		// 保存済みベストタイムを読み込む
 		MGObject mgo = LoadMGO(filename.c_str());
 		if (mgo.size != 0) {
 			memcpy(&best, mgo.data, sizeof(best));
 		}
+
+		// 初回、または今回のタイムがベストなら更新
 		if (resultTime < best || best == 0.0f) {
 			best = resultTime;
 			newBest = true;
@@ -186,13 +208,17 @@ namespace ResultScene {
 		}
 		
 
+		// =======================================================
 		// 背景
+		// =======================================================
 		{
+			// ベース背景
 			AddGameObject(
 				GameObjectQuad(whiteTex, { screenSize.x, screenSize.y }),
 				LAYER_BACKGROUND
 			)->color = { 1.0f, 0.87f, 0.35f, 1.0f };
 
+			// 斜めフリップ演出
 			rotateBackground = AddGameObject(
 				GameObjectQuad(whiteTex, { 0.0f, screenSize.y * 2.0f }, { screenSize.x * -0.5f }),
 				LAYER_BACKGROUND
@@ -200,7 +226,9 @@ namespace ResultScene {
 			rotateBackground->color = { 1.0f, 0.74f, 0.35f, 1.0f };
 		}
 
+		// =======================================================
 		// ラベル
+		// =======================================================
 		{
 			std::vector<std::wstring> labels = {
 				L"タイム", L"ランク"
@@ -247,6 +275,11 @@ namespace ResultScene {
 		);
 		nextLabel->color.w = 0.0f;
 
+
+		// =======================================================
+		// ランク判定
+		// =======================================================
+
 		float rankSTime = GetCommonFloat("course_rank_s_time");
 		float rankATime = GetCommonFloat("course_rank_a_time");
 		float rankBTime = GetCommonFloat("course_rank_b_time");
@@ -289,13 +322,17 @@ namespace ResultScene {
 			);
 		}
 
+		// ランク文字をテクスチャ化する
 		rankTexture = RenderText(rankStr, {
 			600.0f,						// 文字サイズ
 			FONT_MEIRYO,				// フォント
 			FONT_WEIGHT_BOLD
 			});
 
-		// タイム
+		// =======================================================
+		// タイム表示
+		// =======================================================
+
 		timeObj = AddGameObject(
 			GameObjectText(
 				StringToWString(FormatTime(resultTime)),
@@ -363,7 +400,9 @@ namespace ResultScene {
 			LAYER_LABEL // 2Dレイヤーに追加
 		);
 
-		// みぃちゃんのイラスト
+		// =======================================================
+		// みぃちゃんのイラスト表示
+		// =======================================================
 		{
 			shadowMaskRenderTarget = GetRenderer()->CreateRenderTarget(miiTexture->GetWidth(), miiTexture->GetHeight());
 			shadowRenderTarget = GetRenderer()->CreateRenderTarget(miiTexture->GetWidth(), miiTexture->GetHeight());
@@ -392,8 +431,9 @@ namespace ResultScene {
 			);
 		}
 
-
-		// ランク
+		// =======================================================
+		// ランク表示
+		// =======================================================
 		{
 			rankRenderTarget = GetRenderer()->CreateRenderTarget(rankTexture->GetWidth(), rankTexture->GetHeight());
 			rankMaskRenderTarget = GetRenderer()->CreateRenderTarget(rankTexture->GetWidth(), rankTexture->GetHeight());
@@ -419,11 +459,18 @@ namespace ResultScene {
 			rankQuadEffect->color.w = 0.0f;
 		}
 
+		// =======================================================
+		// リザルトBGM再生
+		// =======================================================
+
 		bgmScene = (BGMScene::BGMScene*)LoadScene("bgm");
 		bgmScene->SetCurrentScene(this);
 		bgmScene->SetPlaylist(this, { ASSET.BGM_RESULT });
 		bgmScene->Play(ASSET.BGM_RESULT);
 
+		// =======================================================
+		// ベスト更新時はファイルへ保存
+		// =======================================================
 		if (newBest) {
 			size_t size;
 			size = sizeof(best);
@@ -443,6 +490,8 @@ namespace ResultScene {
 			file.close();
 		}
 
+
+		// 最初は背景演出から開始
 		updateFunc = [this, t = Progress{ 300.0f, false }]() mutable { UpdateBackground(t); };
 
 	}
@@ -481,78 +530,122 @@ namespace ResultScene {
 	void ResultScene::Update()
 	{
 
+		// 現在の演出ステップを更新
 		if (updateFunc && !InTransition()) {
 			updateFunc();
 		}
+
+		// ランク文字の反射演出用オフセット更新
 		reflectionOffset.IncreaseValue(GetDeltaTime());
+
+		// キャラ影の流れ演出用オフセット更新
 		shadowOffset.IncreaseValue(GetDeltaTime());
 	}
 
-
+	// =======================================================
+	// 背景ステート更新
+	// =======================================================
 	void ResultScene::UpdateBackground(Progress& t)
 	{
+		// 決定ボタンで演出をスキップ
 		if (IsInputDown(INPUT_OK)) {
 			t = 1.0f;
 		}
+
 		F2 screenSize = GetScreenSize();
+
+		// 斜めフリップ
 		rotateBackground->size.x = screenSize.x * 0.5f * t;
 		rotateBackground->rotate = Quaternion::AxisZDegree(-16.0f * t);
+
+		// 背景演出完了後、ラベル表示へ進む
 		if (t == 1.0f) {
 			updateFunc = [this, _t = Progress{ 500.0f, false }]() mutable { UpdateLabels(_t); };
 		}
+
 		Scene::Update();
 		t.IncreaseValue(GetDeltaTime());
 	}
 
+	// =======================================================
+	// ラベルステート更新
+	// =======================================================
 	void ResultScene::UpdateLabels(Progress& t)
 	{
+		// 決定ボタンで演出をスキップ
 		if (IsInputDown(INPUT_OK)) {
 			t = 1.0f;
 		}
+
+		// 「タイム」「ランク」などのラベルを少し下からフェードイン
 		for (int i = 0; i < labelObjs.size(); i++) {
 			float y = (CONFIG.LABEL_TOP - CONFIG.LINE_HEIGHT * i * 2.0f);
 			labelObjs[i]->position.y = (y - 30.0f) * (1.0f - t) + y * t;
 			labelObjs[i]->color.w = t;
 		}
+
+		// ラベル演出完了後、タイム表示へ進む
 		if (t == 1.0f) {
 			updateFunc = [this, _t = Progress{ 500.0f, false }]() mutable { UpdateTime(_t); };
 		}
+
 		Scene::Update();
 		t.IncreaseValue(GetDeltaTime());
 	}
 
+	// =======================================================
+	// タイムステート更新
+	// =======================================================
 	void ResultScene::UpdateTime(Progress& t)
 	{
+		// 決定ボタンで演出をスキップ
 		if (IsInputDown(INPUT_OK)) {
 			t = 1.0f;
 		}
+
 		F2 screenSize = GetScreenSize();
+
+		// タイムとベストタイムをフェードイン
 		timeObj->color.w = bestTimeObj->color.w = t;
+
+		// ベスト更新時は「ベスト更新！」も表示し、今回タイムを赤くする
 		if (newBest) {
 			newBestObj->color.w = t;
 			timeObj->color.x = 1.0f;
 		}
+
+		// 右側からスライドイン
 		timeObj->position.x = bestTimeObj->position.x = 
 			newBestObj->position.x = 
 			CONFIG.LABEL_LEFT + CONFIG.MARGIN_X + screenSize.x * (1.0f - t);
 		
 		Scene::Update();
+
+		// タイム表示完了後、ランク表示へ進む
 		if (t == 1.0f) {
 			updateFunc = [this, _t = Progress{ 300.0f, false }, s = Progress{ 300.0f, false }]() mutable { UpdateRank(_t, s); };
 		}
+
 		t.IncreaseValue(GetDeltaTime());
 	}
 
+	// =======================================================
+	// ランクステート更新
+	// =======================================================
 	void ResultScene::UpdateRank(Progress& t, Progress& s)
 	{
+		// 決定ボタンで演出をスキップ
 		if (IsInputDown(INPUT_OK)) {
 			t = 1.0f;
 			s = 1.0f;
 		}
+
+		// ランク文字を大きい状態から通常サイズへ縮小しながら表示
 		F3 rankSize = F3{ (float)rankTexture->GetWidth(), (float)rankTexture->GetHeight() };
 		rankQuad->size = Lerp(rankSize * 5.0f, rankSize, t);
 		rankQuad->color.w = t;
 
+		// ランク文字の一瞬広がるエフェクト
 		if (s) {
 			rankQuadEffect->size = Lerp(rankSize, rankSize * 2.0f, s);
 			rankQuadEffect->color.w = 1.0f - s;
@@ -560,31 +653,50 @@ namespace ResultScene {
 		else {
 			rankQuadEffect->color.w = 0.0f;
 		}
+
 		Scene::Update();
+
+		// ランク演出完了後、SEを鳴らしてキャラ表示へ進む
 		if (s == 1.0f) {
 			rankSE->Play();
 			updateFunc = [this, _t = Progress{ 340.0f, false }, _s = Progress{ 2000.0f, false }]() mutable { UpdateMii(_t, _s); };
 		}
+
+		// ランク本体が表示されてからエフェクトを進める
 		if (t == 1.0f) {
 			s.IncreaseValue(GetDeltaTime());
 		}
+
 		t.IncreaseValue(GetDeltaTime());
 	}
 
+	// =======================================================
+	// キャライラストステート更新
+	// =======================================================
 	void ResultScene::UpdateMii(Progress& t, Progress& s)
 	{
+		// 決定ボタンで演出をスキップ
 		if (IsInputDown(INPUT_OK)) {
 			t = 1.0f;
 			s = 1.0f;
 		}
+
 		F2 screenSize = GetScreenSize();
+
+		// キャラ画像の基準位置
 		F3 position = { (screenSize.x - mii->size.x) * 0.5f, (-screenSize.y + mii->size.y) * 0.5f };
 
+		// キャライラストを右からフェードイン
 		mii->position = position + F3{ 100.0f, 0.0f } * (1.0f - t);
 		mii->color.w = t;
+
+		// 影を少し遅れて表示
 		miiShadow->position = position + F3{ 60.0f, -40.0f } * s;
 		miiShadow->color.w = s;
+
 		Scene::Update();
+
+		// キャラ演出完了後、入力待ちへ移行
 		if (s == 1.0f) {
 			updateFunc = [this, _t = Progress{ 2000.0f, true }]() mutable { UpdateStandby(_t); };
 		}
@@ -594,10 +706,15 @@ namespace ResultScene {
 		t.IncreaseValue(GetDeltaTime());
 	}
 
+	// =======================================================
+	// 入力待ちステート更新
+	// =======================================================
 	void ResultScene::UpdateStandby(Progress& t)
 	{
+		// 戻る案内を点滅させる
 		nextLabel->color.w = sinf(t * PI);
 
+		// 決定ボタンでステージ選択へ戻る
 		if (IsInputTrigger(INPUT_OK)) {
 			SceneTransit("stage_select", "star");
 			t = { 1.0, false };
@@ -615,45 +732,59 @@ namespace ResultScene {
 	{
 		Renderer* renderer = GetRenderer();
 
+		// =======================================================
 		// みぃちゃんの影を作る
+		// =======================================================
 		if(mii && mii->enable && mii->color.w){
 			F3 size = { miiTexture->GetWidth(), miiTexture->GetHeight() };
 
-			// マスク描画
+			// キャラ形状のマスクを作る
 			renderer->SetRenderTarget(shadowMaskRenderTarget);
 			renderer->SetViewport(miiTexture->GetWidth() * 0.5f, miiTexture->GetHeight() * 0.5f, miiTexture->GetWidth(), miiTexture->GetHeight());
 			renderer->ApplyCamera(currentCamera2D);
 			renderer->ClearRenderTargetView(shadowMaskRenderTarget);
+
+			// 白背景からキャラ部分を抜く
 			DrawQuad(whiteTex, {}, size);
 			renderer->SetBlendState(BLEND_STATE_DEST_OUT);
 			DrawQuad(miiTexture, { }, size);
 			renderer->SetBlendState(BLEND_STATE_ALPHA);
 
-			// 影描画
+			// 影用RenderTargetに背景模様を描く
 			renderer->SetRenderTarget(shadowRenderTarget);
 			renderer->SetViewport(miiTexture->GetWidth() * 0.5f, miiTexture->GetHeight() * 0.5f, miiTexture->GetWidth(), miiTexture->GetHeight());
 			renderer->ApplyCamera(currentCamera2D);
 			renderer->ClearRenderTargetView(shadowRenderTarget);
 
 			float scale = max((float)miiTexture->GetWidth() / miiShadowTexture->GetWidth(), (float)miiTexture->GetHeight() / miiShadowTexture->GetHeight());
+			
+			// 流れる影模様
 			DrawQuad(miiShadowTexture, {},
 				F3{ (float)miiShadowTexture->GetWidth(), (float)miiShadowTexture->GetHeight() } * scale,
 				Quaternion::Identity(),
 				{ 1.0f, 1.0f, 1.0f, 1.0f }, 
 				{ shadowOffset, 0.0f }
 			);
+
 			renderer->SetBlendState(BLEND_STATE_ADD);
+
+			// 影の明るさを追加
 			DrawQuad(whiteTex, {}, size, Quaternion::Identity(), miiShadow->color * 0.5f);
+
+			// マスクでキャラ形状だけを残す
 			renderer->SetBlendState(BLEND_STATE_DEST_OUT);
 			DrawQuad(shadowMaskRenderTarget->texture, { }, size);
+
 			renderer->SetBlendState(BLEND_STATE_ALPHA);
 		}
 
-		// ランク
+		// =======================================================
+		// ランク文字の生成
+		// =======================================================
 		if(rankQuad && rankQuad->enable && rankQuad->color.w){
 			F3 size = { rankTexture->GetWidth(), rankTexture->GetHeight() };
 
-			// マスク描画
+			// ランク文字のマスクを作る
 			renderer->SetRenderTarget(rankMaskRenderTarget);
 			renderer->SetViewport(rankTexture->GetWidth() * 0.5f, rankTexture->GetHeight() * 0.5f, rankTexture->GetWidth(), rankTexture->GetHeight());
 			renderer->ApplyCamera(currentCamera2D);
@@ -663,22 +794,33 @@ namespace ResultScene {
 			DrawQuad(rankTexture, { }, size);
 			renderer->SetBlendState(BLEND_STATE_ALPHA);
 
-			// 背景描画
+			// ランク文字内部の色・反射演出を描画
 			renderer->SetRenderTarget(rankRenderTarget);
 			renderer->SetViewport(rankTexture->GetWidth() * 0.5f, rankTexture->GetHeight() * 0.5f, rankTexture->GetWidth(), rankTexture->GetHeight());
 			renderer->ClearRenderTargetView(rankRenderTarget);
+
+			// ランク色で塗る
 			DrawQuad(whiteTex, {}, size, Quaternion::Identity(), rankColor);
+
+			// 反射テクスチャを加算合成
 			renderer->SetBlendState(BLEND_STATE_ADD);
 			DrawQuad(reflectionTexture, {}, size, Quaternion::Identity(),
 				{ 1.0f, 1.0f, 1.0f, 1.0f },
 				{ -reflectionOffset, 0.0f });
+
+			// 文字形状以外を抜く
 			renderer->SetBlendState(BLEND_STATE_DEST_OUT);
 			DrawQuad(rankMaskRenderTarget->texture, { }, size);
+
+			// 設定戻す
 			renderer->SetBlendState(BLEND_STATE_ALPHA);
 			
 		}
 
-		// 通常レンダーターゲットに戻す
+		// =======================================================
+		// 通常描画へ戻す
+		// =======================================================
+
 		renderer->SetRenderTarget(renderTarget);
 		if (renderTarget) {
 			renderer->SetViewport(
@@ -697,7 +839,6 @@ namespace ResultScene {
 			);
 		}
 		
-
 		Scene::Draw();
 	}
 }

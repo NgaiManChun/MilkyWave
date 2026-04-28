@@ -435,8 +435,12 @@ namespace MainGameScene {
 		
 	}
 
+	// =======================================================
+	// プロローグステート更新
+	// =======================================================
 	void MainGameScene::UpdatePrologue()
 	{
+		// プロローグ中はプレイヤーと会話UIだけ表示する
 		for (auto& gameObject : gameObjects) {
 			if (gameObject->layer == LAYER_PLAYER || gameObject == prologue) {
 				gameObject->enable = true;
@@ -446,66 +450,100 @@ namespace MainGameScene {
 			}
 		}
 
+		// プロローグ中はプレイヤーを停止させる
 		player->SetStop(true);
+
+		// 演出用にフィーバー状態にする
 		player->SetFeverAmount(1.0f);
 		player->StartFever();
 
-		// カメラ
-		currentCamera->SetRotate(Quaternion::AxisYRadian(PI * GetDeltaTime() * 0.0001) * currentCamera->GetRotate());
+		// カメラをプレイヤーの周囲でゆっくり回転させる
+		currentCamera->SetRotate(
+			Quaternion::AxisYRadian(PI * GetDeltaTime() * 0.0001) * currentCamera->GetRotate()
+		);
 		currentCamera->SetPosition(player->position - currentCamera->GetFront() * 2.0f);
 
+		// 決定入力で次のセリフへ進める
 		if (IsInputTrigger(INPUT_OK)) {
 			prologue->NextLine();
 		}
 
 		Scene::Update();
 
+		// START入力でプロローグをスキップ
 		if (IsInputTrigger(INPUT_START)) {
 			prologue->Skip();
 		}
+
+		// プロローグ終了後、スタートカウントへ移行
 		if (prologue->IsEnd()) {
 			Progress startCount{ 3000.0f, false };
 			startCount = 1.0f;
+
+			// 本編開始前にフィーバーゲージをリセット
 			player->SetFeverAmount(0.0f);
+
 			SEReady->Play();
+
+			// カウントダウン更新処理へ切り替え
 			updateFunc = [this, t = startCount]() mutable { UpdateStartCount(t); };
 		}
 		
 	}
 
-
+	// =======================================================
+	// エピローグステート更新
+	// =======================================================
 	void MainGameScene::UpdateEpilogue()
 	{
+		// エピローグ会話UIを表示
 		epilogue->enable = true;
 
+		// 決定入力で次のセリフへ進める
 		if (IsInputTrigger(INPUT_OK)) {
 			epilogue->NextLine();
 		}
 
-		currentCamera->SetRotate(Quaternion::AxisYDegree(CONFIG.GOAL_CAMERA_ROTATE * GetDeltaTime() * 0.001f) * currentCamera->GetRotate());
-		currentCamera->SetPosition(player->position + F3{ 0.0f, 1.0f, 0.0f } - currentCamera->GetFront() * CONFIG.GOAL_CAMERA_DISTANCE);
+		// ゴール後カメラをプレイヤー中心に回転させる
+		currentCamera->SetRotate(
+			Quaternion::AxisYDegree(CONFIG.GOAL_CAMERA_ROTATE * GetDeltaTime() * 0.001f) * currentCamera->GetRotate()
+		);
+		currentCamera->SetPosition(
+			player->position + F3{ 0.0f, 1.0f, 0.0f } - currentCamera->GetFront() * CONFIG.GOAL_CAMERA_DISTANCE
+		);
 
 		Scene::Update();
 
+		// START入力でエピローグをスキップ
 		if (IsInputTrigger(INPUT_START)) {
 			epilogue->Skip();
 		}
+
+		// エピローグ終了後、リザルトへ遷移
 		if (!InTransition() && epilogue->IsEnd()) {
+			// リザルトシーンで使うクリアタイムを保存
 			SetCommonFloat("result_time", time);
+
 			SceneTransit("result", "star");
 		}
 		
 	}
 
+	// =======================================================
+	// カウントダウンステート更新
+	// =======================================================
 	void MainGameScene::UpdateStartCount(Progress& t)
 	{
+		// カウントダウン中に表示するレイヤー
 		static std::set<unsigned int> layers = {
-				LAYER_PLAYER,
-				LAYER_ITEMS,
-				LAYER_SURFACE,
-				LAYER_UI,
-				LAYER_COUNT
+			LAYER_PLAYER,
+			LAYER_ITEMS,
+			LAYER_SURFACE,
+			LAYER_UI,
+			LAYER_COUNT
 		};
+
+		// 必要なレイヤーだけ表示する
 		for (auto& gameObject : gameObjects) {
 			if (layers.count(gameObject->layer)) {
 				gameObject->enable = true;
@@ -515,52 +553,100 @@ namespace MainGameScene {
 			}
 		}
 
+		// カウント表示を有効化
 		startCountLabel->enable = true;
-		player->SetStop(true);
-		player->position = startPosition + Rotate({ 0.0f, 0.0f, -CONFIG.START_OFFSET * t }, player->rotate);
 
+		// カウント中はプレイヤー操作を停止
+		player->SetStop(true);
+
+		// カウント演出として、プレイヤーをスタート位置の少し後ろから前へ移動させる
+		player->position = startPosition + Rotate(
+			{ 0.0f, 0.0f, -CONFIG.START_OFFSET * t },
+			player->rotate
+		);
+
+		// 残り秒数から表示するカウント番号を計算
 		float sec = t.GetValue() / 1000.0f;
 		int countNumber = ceil(sec);
+
+		// 秒の小数部分。文字のフェード・拡大縮小に使用
 		float s = sec - floorf(sec);
+
+		// カウントごとにカメラ位置を切り替える
 		if (countNumber == 3) {
-			currentCamera->SetPosition(startPosition + Rotate({ -1.0f, -1.0f, -CONFIG.START_OFFSET * 0.8f }, player->rotate));
+			currentCamera->SetPosition(
+				startPosition + Rotate({ -1.0f, -1.0f, -CONFIG.START_OFFSET * 0.8f }, player->rotate)
+			);
 			currentCamera->SetFront(player->position - currentCamera->GetPosition());
 		}
 		else if (countNumber == 2) {
-			currentCamera->SetPosition(startPosition + Rotate({ 1.0f, 1.0f, -CONFIG.START_OFFSET * 0.5f }, player->rotate));
+			currentCamera->SetPosition(
+				startPosition + Rotate({ 1.0f, 1.0f, -CONFIG.START_OFFSET * 0.5f }, player->rotate)
+			);
 			currentCamera->SetFront(player->position - currentCamera->GetPosition());
 		}
 		else if (countNumber == 1) {
-			currentCamera->SetPosition(startPosition + Rotate({ 0.0f, -2.0f, -CONFIG.START_OFFSET * 0.2f }, player->rotate));
+			currentCamera->SetPosition(
+				startPosition + Rotate({ 0.0f, -2.0f, -CONFIG.START_OFFSET * 0.2f }, player->rotate)
+			);
 			currentCamera->SetFront(player->position - currentCamera->GetPosition());
 		}
-		startCountLabel->SetValue(std::to_wstring(countNumber));
-		startCountLabel->color.w = s;
-		startCountLabel->size = F3{ 300.0f, GetScreenSize().y * 0.8f } * (1.0f - s);
 
+		// カウント数字を表示
+		startCountLabel->SetValue(std::to_wstring(countNumber));
+
+		// カウント文字を徐々に透明にする
+		startCountLabel->color.w = s;
+
+		// カウント文字のサイズ演出
+		startCountLabel->size = F3{ 300.0f, GetScreenSize().y * 0.8f } *(1.0f - s);
+
+		// シーン遷移中でなければカウントを進める
 		if (!InTransition()) {
 			t.IncreaseValue(-GetDeltaTime());
 		}
 
+		// カウント終了後、ゲーム開始
 		if (t == 0.0f) {
 			SEGo->Play();
+
+			// プレイヤーを正式なスタート位置へ戻す
 			player->position = startPosition;
+
+			// 初速を与えてスタート感を出す
 			player->velocity = { 0.0f, 0.0f, 9.0f };
+
+			// プレイヤー操作開始
 			player->SetStop(false);
+
+			// START表示に切り替える
 			startCountLabel->SetValue(L"START");
+
+			// スタート演出更新へ切り替え
 			updateFunc = [this]() -> void { UpdateStart(); };
 		}
+
 		Scene::Update();
 	}
 
+	// =======================================================
+	// ゲームスタートステート更新
+	// =======================================================
 	void MainGameScene::UpdateStart()
 	{
+		// START表示を徐々に消す
 		startCountLabel->color.w = 1.0f - startProgress;
-		startCountLabel->size = F3{ 300.0f, GetScreenSize().y * 0.8f } * startProgress;
+
+		// START表示を拡大する
+		startCountLabel->size = F3{ 300.0f, GetScreenSize().y * 0.8f } *startProgress;
+
+		// スタート演出の進行度を進める
 		startProgress.IncreaseValue(GetDeltaTime());
 
+		// START演出中もゲーム本編は進める
 		UpdatePlay();
 
+		// START演出が終わったら表示を消し、通常プレイ更新へ完全移行
 		if (startProgress == 1.0f) {
 			startCountLabel->enable = false;
 			updateFunc = [this]() -> void { UpdatePlay(); };
@@ -568,6 +654,9 @@ namespace MainGameScene {
 		
 	}
 
+	// =======================================================
+	// ゲーム本編ステート更新
+	// =======================================================
 	void MainGameScene::UpdatePlay()
 	{
 		// =======================================================
@@ -791,6 +880,9 @@ namespace MainGameScene {
 		}
 	}
 
+	// =======================================================
+	// ゴールステート更新
+	// =======================================================
 	void MainGameScene::UpdateGoal(F3& p0, Progress &t)
 	{
 		// ゴール演出中に表示・更新対象として残すレイヤー
@@ -855,62 +947,103 @@ namespace MainGameScene {
 		
 	}
 
+	// =======================================================
+	// 一時停止ステート更新
+	// =======================================================
 	void MainGameScene::UpdatePause()
 	{
+		// プレイ中ヒントは非表示、ポーズUIを表示
 		hintsLabel->enable = false;
 		uiPause->enable = true;
+
+		// ポーズUI自体の更新（選択状態など）
 		uiPause->Update();
+
+		// シーン遷移中でなければ入力受付
 		if (!InTransition()) {
+
+			// 上入力：カーソルを上へ移動
 			if (IsInputTrigger(INPUT_UP)) {
 				SECursor->Play();
 				uiPause->Up();
 			}
+			// 下入力：カーソルを下へ移動
 			else if (IsInputTrigger(INPUT_DOWN)) {
 				SECursor->Play();
 				uiPause->Down();
 			}
-			bool resume = false;
+
+			bool resume = false; // 一時停止解除フラグ
+
+			// 決定入力
 			if (IsInputTrigger(INPUT_OK)) {
 				SEOK->Play();
+
+				// 現在選択されているメニューを取得
 				UIPause::PAUSE_OPTION selected = uiPause->GetOption();
+
 				if (selected == UIPause::PAUSE_OPTION::PAUSE_OPTION_RESUME) {
+					// ゲームに戻る
 					resume = true;
 				}
 				else if (selected == UIPause::PAUSE_OPTION::PAUSE_OPTION_STAGE) {
+					// ステージ選択へ遷移
 					SceneTransit("stage_select", "star");
 				}
 				else if (selected == UIPause::PAUSE_OPTION::PAUSE_OPTION_TITLE) {
+					// タイトルへ戻る
 					SceneTransit("title", "star");
 				}
 				else if (selected == UIPause::PAUSE_OPTION::PAUSE_OPTION_GYRO) {
+					// ジャイロ操作ON/OFF切り替え
 					gyro = !gyro;
 					SetCommonBool("gyro", gyro);
 				}
 			}
+			// スタート or キャンセル入力でもポーズ解除
 			else if (IsInputTrigger(INPUT_START) || IsInputTrigger(INPUT_CANCEL)) {
 				SEOK->Play();
 				resume = true;
 			}
+
+			// ポーズ解除処理
 			if (resume) {
-				hintsLabel->enable = true;
-				uiPause->enable = false;
+				hintsLabel->enable = true;   // ヒント再表示
+				uiPause->enable = false;     // ポーズUI非表示
+
+				// ゲーム本編の更新に戻す（カウント後の状態へ）
 				updateFunc = [this]() -> void { UpdateStart(); };
 			}
 		}
 	}
 
+	// =======================================================
+	// 操作ヒント文字列を取得
+	// =======================================================
 	std::wstring MainGameScene::GetHintsLabel()
 	{
 		std::wstring hintsStr;
+
+		// 横移動の説明
+		// ジャイロONなら「ジャイロで」、OFFならスティック表記を表示
 		if (gyro) {
 			hintsStr = L"ジャイロで";
 		}
 		else {
+			// 入力デバイスに応じたラベル（例：Lスティック）を取得
 			hintsStr = GetInputLabel(L"{AnalogLeft}");
 		}
+
+		// 横移動説明を追加
 		hintsStr += L"横移動\n";
+
+		// フィーバー使用方法（OKボタン）
 		hintsStr += GetInputLabel(L"{OK}") + L"フィーバーゲージを使う\n";
+
+		// ポーズ操作（STARTボタン）
 		hintsStr += GetInputLabel(L"{Start}") + L"一時停止";
+
+		// 完成したヒント文字列を返す
 		return hintsStr;
 	}
 
@@ -921,33 +1054,52 @@ namespace MainGameScene {
 	{
 		Renderer* renderer = GetRenderer();
 
-		// スクリーンの中心座標を取得
+		// スクリーン中心座標を取得
 		F2 screenCenter = GetScreenCenter();
 
-		// スクリーンのサイズを取得
+		// スクリーンサイズを取得
 		F2 screenSize = GetScreenSize();
 
+		// フィーバー状態の進行度を取得
 		float fever = player->IsFever();
+
 		if (fever) {
-			// サブ描画ターゲット設定
+			// フィーバー中は一度サブ描画ターゲットへ描画する
+			// 後でこの結果を揺らし・拡大などのエフェクトとして重ねる
 			renderer->SetRenderTarget(effectRenderTarget);
 			renderer->ClearRenderTargetView(effectRenderTarget);
 			renderer->SetViewport(screenCenter.x, screenCenter.y, screenSize.x, screenSize.y);
 		}
 
-		// 背景
+		// =======================================================
+		// 背景描画
+		// =======================================================
+
+		// 3Dカメラを適用
 		renderer->ApplyCamera(currentCamera);
+
+		// 背景は深度を書き込まず、常に描画する
 		renderer->SetDepthState(DEPTH_STATE_NO_WRITE_DRAW_ALL);
 		DrawModel(background, currentCamera->GetPosition());
+
+		// 通常の深度設定に戻す
 		renderer->SetDepthState(DEPTH_STATE_ENABLE);
 
+		// =======================================================
+		// 3Dオブジェクト描画
+		// =======================================================
+
 		LAYER_TYPE currentLayerType = LAYER_TYPE_NONE;
+
 		for (auto& gameObject : gameObjects) {
+			// 無効なオブジェクト、または2Dレイヤーはここでは描画しない
 			if (!gameObject->enable || gameObject->layer >= LAYER_2D) continue;
 
+			// レイヤー種類が変わったら対応するカメラに切り替える
 			LAYER_TYPE type = GetLayerType(gameObject->layer);
 			if (currentLayerType != type) {
 				currentLayerType = type;
+
 				if (type == LAYER_TYPE_2D) {
 					renderer->ApplyCamera(currentCamera2D);
 				}
@@ -955,12 +1107,20 @@ namespace MainGameScene {
 					renderer->ApplyCamera(currentCamera);
 				}
 			}
+
+			// オブジェクト描画
 			gameObject->Draw();
 		}
 
 		if (fever) {
-			// メイン描画ターゲットに切り替える
+			// =======================================================
+			// フィーバー時のポストエフェクト描画
+			// =======================================================
+
+			// 描画先をメイン描画ターゲットへ戻す
 			renderer->SetRenderTarget(renderTarget);
+
+			// メイン描画ターゲットのサイズに合わせてビューポートを設定
 			if (renderTarget) {
 				renderer->SetViewport(
 					renderTarget->texture->GetWidth() * 0.5f,
@@ -970,6 +1130,7 @@ namespace MainGameScene {
 				);
 			}
 			else {
+				// 通常の画面描画時
 				renderer->SetViewport(
 					GetScreenWidth() * 0.5f,
 					GetScreenHeight() * 0.5f,
@@ -978,7 +1139,10 @@ namespace MainGameScene {
 				);
 			}
 
+			// 2Dカメラに切り替えて、サブ描画ターゲットの内容を画面へ描画
 			renderer->ApplyCamera(currentCamera2D);
+
+			// サブ描画ターゲットを通常サイズで描画
 			DrawQuad(
 				effectRenderTarget->texture,
 				{ 0.0f, 0.0f, 0.0f },
@@ -987,6 +1151,7 @@ namespace MainGameScene {
 				{ 1.0f, 1.0f, 1.0f, 1.0f }
 			);
 
+			// サブ描画ターゲットを少しずらして重ね、フィーバー中の残像・揺れ表現を作る
 			for (int i = 0; i < feverEffects.size(); i++) {
 				DrawQuad(
 					effectRenderTarget->texture,
@@ -998,21 +1163,31 @@ namespace MainGameScene {
 			}
 		}
 
+		// =======================================================
+		// 2D UI描画
+		// =======================================================
+
+		// 2Dカメラに切り替え
 		renderer->ApplyCamera(currentCamera2D);
+
 		for (auto& gameObject : gameObjects) {
+			// 2Dレイヤーの有効なオブジェクトだけ描画
 			if (gameObject->enable && gameObject->layer >= LAYER_2D) {
 				gameObject->Draw();
 			}
 		}
-		
 	}
 
 	void MainGameScene::SortGameObjects()
 	{
+		// レイヤー順に並べ替える
+		// 同じレイヤー内では、カメラから遠い順に描画する
+		// 半透明オブジェクトを奥から手前へ描くためのソート
 		gameObjects.sort([this](GameObject* a, GameObject* b) -> bool {
 			if (a->layer == b->layer) {
 				return DistanceSquare(currentCamera->position, a->position) > DistanceSquare(currentCamera->position, b->position);
 			}
+
 			return a->layer < b->layer;
 		});
 	}

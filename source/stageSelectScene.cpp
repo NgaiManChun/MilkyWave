@@ -106,6 +106,9 @@ namespace StageSelectScene {
 		//LAYER_TYPE GetLayerType(int layer) override;
 	};
 
+	// =======================================================
+	// 設定値ロード
+	// =======================================================
 	static const StageSelectScene::_CONFIG CONFIG = LoadConfig<StageSelectScene::_CONFIG>("asset\\config.csv", [](const D_KVTABLE& table) -> StageSelectScene::_CONFIG {
 		return {
 			TABLE_FLOAT_VALUE(table, "PLAYER_MAX_VELOCITY", 9.0f),
@@ -113,6 +116,9 @@ namespace StageSelectScene {
 		};
 	});
 
+	// =======================================================
+	// アセットロード
+	// =======================================================
 	static const StageSelectScene::_ASSET ASSET = LoadConfig<StageSelectScene::_ASSET>("asset\\asset_list.csv", [](const D_KVTABLE& table) -> StageSelectScene::_ASSET {
 		return {
 			TABLE_STR_VALUE(table, "BGM_TITLE", "asset\\sound\\title.wav"),
@@ -491,17 +497,22 @@ namespace StageSelectScene {
 		// 操作方法の表示
 		// =======================================================
 		{
+			// フリップ演出の進行度に合わせて、タイトルと操作説明をフェードイン
 			labelSelect->color.w = flip;
 			labelHints->color.w = flip;
 
+			// 左右入力でジャイロ操作のON/OFFを切り替える
 			if (IsInputTrigger(INPUT_LEFT) || IsInputTrigger(INPUT_RIGHT)) {
 				gyro = !gyro;
 				SetCommonBool("gyro", gyro);
 			}
+
+			// 基本操作説明の文字列を作成
 			std::wstring label = GetInputLabel(L"↑") + GetInputLabel(L"↓") + L"選択 ";
 			label += GetInputLabel(L"{OK}") + L"決定 ";
 			label += GetInputLabel(L"{Cancel}") + L"戻る ";
 
+			// ジャイロ対応コントローラーが接続されている場合のみ、ジャイロ設定を表示
 			if (HasProcon() || HasDualSense()) {
 				label += L"\nジャイロ：";
 				if (gyro) {
@@ -511,29 +522,48 @@ namespace StageSelectScene {
 					label += GetInputLabel(L"←") + L" Off  " + GetInputLabel(L"→");
 				}
 			}
+			// ジャイロ非対応環境では、強制的にOFFにする
 			else if (gyro) {
 				gyro = false;
 				SetCommonBool("gyro", gyro);
 			}
 
+			// 操作説明テキストを更新
 			labelHints->SetValue(label);
 
+			// ステージ名リストの表示位置・サイズ・色を更新
 			for (int i = 0; i < textObjs.size(); i++) {
 
+				// 現在選択中のステージから見た相対位置
+				// rollによって選択移動中の滑らかなスクロールを表現する
 				float sub = (float)currentIndex - (1.0f - roll) * rollDirect - (float)i;
 				float absSub = abs(sub);
+
+				// 選択項目を中心に、上下へずらして配置
 				textObjs[i]->position = currentPosition + F3{ 0.0f, 300.0f * 0.3f * sub };
+
+				// 選択項目から離れるほど小さくする
 				textObjs[i]->size = currentSize * (1.0f - 0.3f * absSub);
-				textObjs[i]->color = { 0.3f - absSub, 0.6f - absSub, 1.0f - absSub, (1.0f - 0.3f * absSub) * flip };
+
+				// 選択項目から離れるほど暗く・透明にする
+				textObjs[i]->color = {
+					0.3f - absSub,
+					0.6f - absSub,
+					1.0f - absSub,
+					(1.0f - 0.3f * absSub) * flip
+				};
 			}
 		}
 
+		// 背景スクロール用の進行値
 		static Progress bgT{ 15000.0f, true };
+
+		// UVをずらして背景を流れるように見せる
 		background->uvOffset = background->uvRange * -bgT;
 
 		Scene::Update();
 
-		// 背景ロール
+		// 背景スクロール進行
 		bgT.IncreaseValue(GetDeltaTime());
 		
 		if (!InTransition()) {
@@ -542,6 +572,7 @@ namespace StageSelectScene {
 			flip.IncreaseValue(GetDeltaTime());
 		}
 
+		// ステージ名ロール進行
 		roll.IncreaseValue(GetDeltaTime());
 		
 		// =======================================================

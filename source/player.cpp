@@ -16,7 +16,9 @@
 // フィーバーゲージへのチャージ速度（毎秒）
 static constexpr const float FEVER_STOCK_CHARAGE_SPEED = 3000.0f;
 
-// 設定値ロード（config.csv）
+// =======================================================
+// 設定値ロード
+// =======================================================
 static const Player::_CONFIG CONFIG = LoadConfig<Player::_CONFIG>("asset\\config.csv", [](const D_KVTABLE& table) -> Player::_CONFIG {
 	return {
 		// 通常時最大速度
@@ -48,7 +50,9 @@ static const Player::_CONFIG CONFIG = LoadConfig<Player::_CONFIG>("asset\\config
 	};
 	});
 
+// =======================================================
 // アセットロード
+// =======================================================
 static const Player::_ASSET ASSET = LoadConfig<Player::_ASSET>("asset\\asset_list.csv", [](const D_KVTABLE& table) -> Player::_ASSET {
 	return {
 		TABLE_STR_VALUE(table, "BOAT_MODEL", "asset\\model\\boat.mgm"),

@@ -40,6 +40,9 @@ namespace MainGameScene {
 		return 1.0f - sqrtf(1.0f - t);
 	}
 
+	// =======================================================
+	// 設定値ロード
+	// =======================================================
 	static const MainGameScene::_CONFIG CONFIG = LoadConfig<MainGameScene::_CONFIG>("asset\\config.csv", [](const D_KVTABLE& table) -> MainGameScene::_CONFIG {
 		F3 GOAL_CAMERA_ANGLE = Normalize(F3{
 			TABLE_FLOAT_VALUE(table, "GOAL_CAMERA_ANGLE_X", 3.0f), 
@@ -57,6 +60,9 @@ namespace MainGameScene {
 		};
 	});
 
+	// =======================================================
+	// アセットロード
+	// =======================================================
 	static const MainGameScene::_ASSET ASSET = LoadConfig<MainGameScene::_ASSET>("asset\\asset_list.csv", [](const D_KVTABLE& table) -> MainGameScene::_ASSET {
 		return {
 			TABLE_STR_VALUE(table, "CUTIN_FEVER_TEXTURE", "asset\\texture\\cutin_fever.png"),

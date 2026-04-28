@@ -35,6 +35,14 @@ namespace FBXDATA {
 	}
 
 	void LoadNode(MODEL_NODE* node, aiNode* ainode) {
+
+		// =======================================================
+		// Assimpのノード構造を自前構造へ変換
+		// ・Transform分解（scale/rotate/position）
+		// ・メッシュ参照コピー
+		// ・子ノードを再帰処理
+		// =======================================================
+
 		node->childrenNum = ainode->mNumChildren;
 		node->children = new MODEL_NODE[ainode->mNumChildren]{};
 		node->meshNum = ainode->mNumMeshes;
@@ -53,6 +61,8 @@ namespace FBXDATA {
 			for (int i = 0; i < ainode->mMetaData->mNumProperties; i++) {
 				aiString key = ainode->mMetaData->mKeys[i];
 				aiMetadataType type = ainode->mMetaData->mValues[i].mType;
+
+				// metadataからinstanceタグを取得（配置情報用）
 				if (!strcmp(key.C_Str(), "instance") && type == AI_AISTRING) {
 					aiString* value = (aiString*)ainode->mMetaData->mValues[i].mData;
 					node->instance = value->C_Str();
@@ -88,7 +98,15 @@ namespace FBXDATA {
 
 	char* GetModelData(MODEL& model, size_t& size) {
 
-		// サイズ計算
+
+		// =======================================================
+		// モデル全体を1つの連続メモリにシリアライズする
+		// ・ポインタをすべて解決してフラット化
+		// ・ファイル書き込み用
+		// =======================================================
+
+		// ---------- サイズ計算フェーズ ----------
+		// 各構造体＋可変長データ（頂点・文字列など）の合計サイズを計算
 		size = sizeof(MODEL);
 		size += sizeof(MESH) * model.meshNum;
 		for (int i = 0; i < model.meshNum; i++)
@@ -127,15 +145,19 @@ namespace FBXDATA {
 			size += std::strlen(node->instance) + 1;
 		}
 
-		// データ写す
+		// ---------- データ書き込みフェーズ ----------
+		// currentポインタを進めながら、順番にメモリへ詰めていく
 		char* data = new char[size];
 		char* current = data;
 		size_t length = sizeof(MODEL);
 		memcpy(current, &model, length);
 		MODEL* distModel = (MODEL*)current;
+
+		// ポインタは保存しない（復元時に再構築するため）
 		distModel->meshes = nullptr;
 		distModel->textures = nullptr;
 		distModel->rootNode = nullptr;
+
 		current += length;
 
 		// メッシュ
@@ -209,11 +231,8 @@ namespace FBXDATA {
 		}
 
 		// ノード
-		/*length = sizeof(MODEL_NODE) * nodeList.size();
-		memcpy(current, *nodeList.data(), length);
-		MODEL_NODE* distModelNodes = (MODEL_NODE*)current;
-		current += length;*/
-
+		// ノードもフラットに展開して書き込む
+		// （ツリー構造 → 配列化）
 		for (auto itr = nodeList.begin(); itr != nodeList.end(); itr++) {
 
 			length = sizeof(MODEL_NODE);
@@ -309,12 +328,19 @@ namespace FBXDATA {
 
 	void ReadModel(const char* fileName, const char* outputName = nullptr) {
 
+		// =======================================================
+		// FBX → 自作MODEL構造へ変換
+		// ・メッシュ
+		// ・ボーン
+		// ・テクスチャ
+		// ・ノード構造
+		// =======================================================
+
 		Assimp::Importer importer;
 		importer.SetPropertyBool(AI_CONFIG_IMPORT_FBX_OPTIMIZE_EMPTY_ANIMATION_CURVES, false);
 		const aiScene* scene = importer.ReadFile(fileName
 			, aiProcessPreset_TargetRealtime_MaxQuality | aiProcess_ConvertToLeftHanded);
 
-		//const aiScene* scene = aiImportFile(fileName, aiProcessPreset_TargetRealtime_MaxQuality | aiProcess_ConvertToLeftHanded | aiProcess_Triangulate | aiProcess_JoinIdenticalVertices);
 		assert(scene);
 		
 		MODEL model;
@@ -421,6 +447,8 @@ namespace FBXDATA {
 				mesh.boneWeights = new VERTEX_BONE_WEIGHT[aimesh->mNumVertices]{};
 				for (unsigned int v = 0; v < aimesh->mNumVertices; v++)
 				{
+					// 各頂点に対して最大4ボーンのウェイトを割り当てる
+					// 重み順にソートして上位4つだけ使用
 					std::sort(vertexWeights[v].begin(), vertexWeights[v].end(), [](BONE_WEIGHT& a, BONE_WEIGHT& b) {
 						return a.weight > b.weight;
 					});
@@ -526,12 +554,16 @@ namespace FBXDATA {
 
 	void ReadAnimation(const char* fileName, const char* outputName = nullptr) {
 
+		// =======================================================
+		// FBXアニメーション → 自作ANIMATION構造へ変換
+		// ・チャンネル単位（ノードごと）でキーを取得
+		// =======================================================
+
 		Assimp::Importer importer;
 		importer.SetPropertyBool(AI_CONFIG_IMPORT_FBX_OPTIMIZE_EMPTY_ANIMATION_CURVES, false);
-		//importer.SetPropertyBool(AI_CONFIG_IMPORT_FBX_READ_ALL_GEOMETRY_LAYERS, false);
 		const aiScene* scene = importer.ReadFile(fileName
 			, aiProcessPreset_TargetRealtime_MaxQuality | aiProcess_ConvertToLeftHanded);
-		//const aiScene* scene = aiImportFile(fileName, aiProcessPreset_TargetRealtime_MaxQuality | aiProcess_ConvertToLeftHanded);
+
 		assert(scene);
 
 		// アニメーション読み込み
@@ -625,7 +657,6 @@ namespace FBXDATA {
 			animation.channels = nullptr;
 		}
 
-		//aiReleaseImport(scene);
 		importer.FreeScene();
 	}
 

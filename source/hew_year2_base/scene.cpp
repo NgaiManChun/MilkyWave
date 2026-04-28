@@ -55,6 +55,8 @@ namespace MG {
 
 	void Scene::DoGameObjectCommands()
 	{
+		// キューに溜まっているGameObject操作命令を順次処理する
+		// Update/Draw中に直接リストを触らないための仕組み
 		while (!gameObjectCommands.empty()) {
 			GameObjectCommand command = gameObjectCommands.front();
 			gameObjectCommands.pop_front();
@@ -64,17 +66,32 @@ namespace MG {
 
 	void Scene::DoGameObjectCommand(const GameObjectCommand& command)
 	{
+		// =======================================================
+		// 更新命令
+		// =======================================================
 		if (command.type == UPDATE) {
+
+			// 対象オブジェクトが現在のシーンに存在するか確認
 			auto itr = std::find(gameObjects.begin(), gameObjects.end(), command.gameObject);
+
+			// 存在し、有効状態ならUpdate実行
 			if (itr != gameObjects.end() && command.gameObject->enable) {
 				lockedGameObject = command.gameObject;
 				command.gameObject->Update();
 				lockedGameObject = nullptr;
 			}
 		}
+
+		// =======================================================
+		// 描画命令
+		// =======================================================
 		else if (command.type == DRAW) {
+
+			// 対象オブジェクトが現在のシーンに存在するか確認
 			auto itr = std::find(gameObjects.begin(), gameObjects.end(), command.gameObject);
 			if (itr != gameObjects.end() && command.gameObject->enable) {
+
+				// レイヤータイプ（3D or 2D）に応じてカメラを切り替える
 				LAYER_TYPE type = GetLayerType(command.gameObject->layer);
 				if (currentLayerType != type) {
 					currentLayerType = type;
@@ -85,24 +102,45 @@ namespace MG {
 						GetRenderer()->ApplyCamera(currentCamera);
 					}
 				}
+
 				lockedGameObject = command.gameObject;
 				command.gameObject->Draw();
 				lockedGameObject = nullptr;
 			}
 		}
+
+		// =======================================================
+		// 追加命令
+		// =======================================================
 		else if (command.type == ADD) {
+
+			// 所属シーンとレイヤーを設定
 			command.gameObject->scene = this;
 			command.gameObject->layer = command.layer;
+
 			gameObjects.push_back(command.gameObject);
 		}
+
+		// =======================================================
+		// 挿入命令（指定位置に追加）
+		// =======================================================
 		else if (command.type == INSERT) {
+
+			// インデックスを安全な範囲にクランプ
 			int index = command.index;
 			index = std::max(index, 0);
 			index = std::min(index, (int)gameObjects.size());
+
+			// 所属シーンとレイヤーを設定
 			command.gameObject->scene = this;
 			command.gameObject->layer = command.layer;
+
 			gameObjects.insert(std::next(gameObjects.begin(), index), command.gameObject);
 		}
+
+		// =======================================================
+		// 削除命令
+		// =======================================================
 		else if (command.type == REMOVE) {
 			gameObjects.remove(command.gameObject);
 			delete command.gameObject;
@@ -341,6 +379,7 @@ namespace MG {
 
 	void DoSceneCommands()
 	{
+		// キューに積まれているシーン操作命令を順番に処理する
 		while (!__sceneCommands.empty()) {
 			SceneCommand command = __sceneCommands.front();
 			__sceneCommands.pop_front();
@@ -350,9 +389,16 @@ namespace MG {
 
 	void DoSceneCommand(SceneCommand command)
 	{
+		// =======================================================
+		// 更新命令
+		// =======================================================
 		if (command.type == UPDATE) {
+
+			// 対象シーンが生成済みなら更新する
 			if ((*__instances)[command.sceneName]) {
 				Scene* scene = (*__instances)[command.sceneName];
+
+				// 実行中シーンに含まれている場合のみUpdateする
 				auto itr = std::find(__runningScenes->begin(), __runningScenes->end(), scene);
 				if (itr != __runningScenes->end()) {
 					lockedScene = scene;
@@ -362,9 +408,17 @@ namespace MG {
 				}
 			}
 		}
+
+		// =======================================================
+		// 描画命令
+		// =======================================================
 		else if (command.type == DRAW) {
+
+			// 対象シーンが生成済みなら描画する
 			if ((*__instances)[command.sceneName]) {
 				Scene* scene = (*__instances)[command.sceneName];
+
+				// 実行中シーンに含まれている場合のみDrawする
 				auto itr = std::find(__runningScenes->begin(), __runningScenes->end(), scene);
 				if (itr != __runningScenes->end()) {
 					lockedScene = scene;
@@ -373,41 +427,85 @@ namespace MG {
 				}
 			}
 		}
+
+		// =======================================================
+		// シーン開始命令
+		// =======================================================
 		else if (command.type == START) {
+
+			// シーンを取得。未生成ならLoadScene内で生成される想定
 			Scene* scene = LoadScene(command.sceneName);
+
 			if (scene) {
+
+				// すでに実行中なら一度リストから外す
 				auto itr = std::find(__runningScenes->begin(), __runningScenes->end(), scene);
 				if (itr != __runningScenes->end()) {
 					__runningScenes->erase(itr);
 				}
+
+				// 初期化中はロック
 				lockedScene = scene;
+
 				scene->Init();
+
 				lockedScene = nullptr;
+
+				// 実行中シーンの先頭へ追加
 				__runningScenes->push_front(scene);
 			}
 		}
+
+		// =======================================================
+		// シーン終了命令
+		// =======================================================
 		else if (command.type == END) {
+
+			// 対象シーンが生成済みなら終了処理を行う
 			if ((*__instances)[command.sceneName]) {
 				Scene* scene = (*__instances)[command.sceneName];
+
+				// 実行中シーンに含まれている場合のみUninitする
 				auto itr = std::find(__runningScenes->begin(), __runningScenes->end(), scene);
 				if (itr != __runningScenes->end()) {
 					lockedScene = scene;
 					scene->Uninit();
 					lockedScene = nullptr;
+
+					// 実行中リストから外す
 					__runningScenes->erase(itr);
 				}
 			}
 		}
+
+		// =======================================================
+		// シーンロード命令
+		// =======================================================
 		else if (command.type == LOAD) {
+
+			// まだインスタンスが存在しない場合のみ生成する
 			if (!(*__instances)[command.sceneName]) {
+
+				// 登録済みの生成関数があれば、それを使ってシーンを生成
 				if ((*__sceneInstanceFunctions)[command.sceneName]) {
 					(*__instances)[command.sceneName] = (*__sceneInstanceFunctions)[command.sceneName]();
 				}
 			}
 		}
+
+		// =======================================================
+		// シーン解放命令
+		// =======================================================
 		else if (command.type == RELEASE) {
 			Scene* scene = (*__instances)[command.sceneName];
+
+			// 実行中リスト内にあるか確認
 			auto itr = std::find(__runningScenes->begin(), __runningScenes->end(), scene);
+
+			// 対象シーンが存在し、実行中ならリストから外して削除
+			// 稼働中なら一覧から外す
+			// ※ReleaseSceneではUninitを呼ばない設計なので、
+			// 必要なら事前にEndSceneで終了処理を行う
 			if (scene && itr != __runningScenes->end()) {
 				__runningScenes->erase(itr);
 				delete scene;
@@ -418,19 +516,30 @@ namespace MG {
 
 	void UninitScene()
 	{
+		// 生成済みシーンをすべて終了・破棄する
 		for (const auto& pair : (*__instances)) {
+
+			// シーンが存在する場合は終了処理を呼ぶ
 			if ((*__instances)[pair.first]) {
 				(*__instances)[pair.first]->Uninit();
 			}
+
+			// シーンインスタンスを破棄
 			delete (*__instances)[pair.first];
 			(*__instances)[pair.first] = nullptr;
 		}
+
+		// 登録済みのシーン生成関数を無効化
 		for (auto& pair : *__sceneInstanceFunctions) {
 			(*__sceneInstanceFunctions)[pair.first] = nullptr;
 		}
+
+		// 管理コンテナをクリア
 		__sceneInstanceFunctions->clear();
 		__instances->clear();
 		__runningScenes->clear();
+
+		// 管理コンテナ自体を破棄
 		delete __sceneInstanceFunctions;
 		delete __instances;
 		delete __runningScenes;

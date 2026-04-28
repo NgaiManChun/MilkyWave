@@ -315,68 +315,108 @@ void Player::ResetPosition()
 
 void Player::OnCollision(GameObject* gameObject, const std::list<COLLISION_PAIR>& pairs)
 {
+	// コースと衝突している場合
 	if (IS_TYPE(*gameObject, Course)) {
 		Course* course = (Course*)gameObject;
 		this->course = course;
+
+		// 現在位置における重力方向と水面情報を取得
 		gravity = course->GetGravity(position);
 		surfaceAlign = course->GetSurfaceAlign(position, gravity.rotate);
-		
-		// 深すぎるとアウト扱い
-		if (surfaceAlign.depth < CONFIG.SURFACE_THICKNESS * ((fever) ? 3.0f : 1.0f)) {
 
+		// 水面から深すぎない範囲なら、コース内にいる扱い
+		// フィーバー中は許容範囲を広げる
+		if (surfaceAlign.depth < CONFIG.SURFACE_THICKNESS* ((fever) ? 3.0f : 1.0f)) {
+
+			// 水面に入った瞬間、一定以上の落下速度があれば着水SEを再生
 			if (surfaceAlign.depth > 0.0f && velocity.y < -CONFIG.SPLASH_MIN_VELOCITY * 2.0f && !swash) {
-				// 着水SE
 				SESwash.Play();
 				swash = true;
 			}
 
+			// コース内判定を維持
 			inCourse = 1.0f;
 		}
 
-		bool enableSplash = !inGoal && DistanceSquare({}, velocity) > CONFIG.SPLASH_MIN_VELOCITY * CONFIG.SPLASH_MIN_VELOCITY;
+		// ゴール前かつ一定以上の速度がある場合、水しぶきを出す
+		bool enableSplash =
+			!inGoal &&
+			DistanceSquare({}, velocity) > CONFIG.SPLASH_MIN_VELOCITY * CONFIG.SPLASH_MIN_VELOCITY;
+
+		// 各水しぶきエフェクトが水面付近にあるか確認して再生・停止を切り替える
 		for (auto& splashEffect : splashEffects) {
 			auto align = course->GetSurfaceAlign(splashEffect.object->position, gravity.rotate);
-			splashEffect.object->SetStarted(enableSplash && align.depth > 0.0f && align.depth < CONFIG.SURFACE_THICKNESS * ((fever) ? 3.0f : 1.0f));
+
+			splashEffect.object->SetStarted(
+				enableSplash &&
+				align.depth > 0.0f &&
+				align.depth < CONFIG.SURFACE_THICKNESS * ((fever) ? 3.0f : 1.0f)
+			);
 		}
-		
 	}
+
+	// 障害物または石と衝突した場合
 	else if (IS_TYPE(*gameObject, Obstacle) || IS_TYPE(*gameObject, Stone)) {
+
+		// 破壊済みでなければダメージ判定
 		if (!((Obstacle*)gameObject)->GetDestory()) {
+
+			// 無敵中ではなく、フィーバー中でもなければダメージを受ける
 			if (invincible == 0.0f && !fever) {
 				SEDamage.Play();
+
+				// 速度をリセットし、一定時間無敵にする
 				resetVelocity = true;
 				invincible = 1.0f;
+
+				// 点滅演出を最初から開始
 				blinking = 0.0f;
 			}
 		}
 	}
+
+	// フィーバーアイテムと衝突した場合
 	else if (IS_TYPE(*gameObject, FeverPiece)) {
-		// フィーバーゲージチャージ
+
+		// 破壊済みでなければフィーバーゲージをチャージ
 		if (!((FeverPiece*)gameObject)->GetDestory()) {
 			float h = GetScreenHeight() * 0.5f;
 
-			// チャージ量を一時保存に追加して、
-			// 時間差で少しずつチャージする
+			// チャージ情報を一時保存する
+			// ここでは即座にゲージを増やさず、UI演出後に少しずつ加算する
 			feverStocks.push_back({
 				timeGetTime(),
-				scene->GetCurrentCamera()->GetScreenPosition(position), // 取得時の画面上の2D座標
-				// ベジェ曲線のコントロール点(2D)を生成し、
-				// 破片をゲージUIに向けて飛ばす
-				// point0: 取得した座標
-				// point1: コントロール点
-				// point2: ゲージUI座標
+
+				// アイテム取得時の画面上の2D座標
+				scene->GetCurrentCamera()->GetScreenPosition(position),
+
+				// ベジェ曲線用のランダムな制御点
+				// アイテム破片がゲージUIへ飛んでいく演出に使う
 				{
-					F2{ ((float)rand() / RAND_MAX) * h * ((rand() % 2) ? 1.0f : -1.0f), ((float)rand() / RAND_MAX) * h * ((rand() % 2) ? 1.0f : -1.0f) },
-					F2{ ((float)rand() / RAND_MAX) * h * ((rand() % 2) ? 1.0f : -1.0f), ((float)rand() / RAND_MAX) * h * ((rand() % 2) ? 1.0f : -1.0f) },
-					F2{ ((float)rand() / RAND_MAX) * h * ((rand() % 2) ? 1.0f : -1.0f), ((float)rand() / RAND_MAX) * h * ((rand() % 2) ? 1.0f : -1.0f) }
+					F2{ ((float)rand() / RAND_MAX) * h * ((rand() % 2) ? 1.0f : -1.0f),
+						((float)rand() / RAND_MAX) * h * ((rand() % 2) ? 1.0f : -1.0f) },
+
+					F2{ ((float)rand() / RAND_MAX) * h * ((rand() % 2) ? 1.0f : -1.0f),
+						((float)rand() / RAND_MAX) * h * ((rand() % 2) ? 1.0f : -1.0f) },
+
+					F2{ ((float)rand() / RAND_MAX) * h * ((rand() % 2) ? 1.0f : -1.0f),
+						((float)rand() / RAND_MAX) * h * ((rand() % 2) ? 1.0f : -1.0f) }
 				},
-				1.0f / CONFIG.FEVER_AMOUNT_MAX * CONFIG.FEVER_TIME // チャージ量
-			});
+
+				// 1個分のフィーバーゲージ増加量
+				1.0f / CONFIG.FEVER_AMOUNT_MAX * CONFIG.FEVER_TIME
+				});
 		}
 	}
+
+	// ゴールと衝突した場合
 	else if (IS_TYPE(*gameObject, Goal)) {
+
+		// プレイヤー操作を停止し、ゴール状態へ移行
 		stop = true;
 		inGoal = true;
+
+		// ゴール後は水しぶきエフェクトを止める
 		for (auto& splashEffect : splashEffects) {
 			splashEffect.object->SetStarted(false);
 		}

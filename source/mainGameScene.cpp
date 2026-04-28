@@ -9,8 +9,14 @@
 #include "input.h"
 #include "formatTime.h"
 #include <atomic>
+
+// =======================================================
+// メインゲームシーン
+// ステージ生成、UI生成、ゲーム進行、ポーズ、描画を管理する
+// =======================================================
 namespace MainGameScene {
 
+	// 描画・更新順を制御するレイヤー定義
 	static constexpr const int LAYER_PLAYER = 3;
 	static constexpr const int LAYER_GALLERY = 4;
 	static constexpr const int LAYER_ITEMS = 5;
@@ -20,11 +26,16 @@ namespace MainGameScene {
 	static constexpr const int LAYER_TALK = LAYER_COUNT + 1;
 	static constexpr const int LAYER_CURTAIN = LAYER_TALK + 1;
 	static constexpr const int LAYER_PAUSE = LAYER_CURTAIN + 1;
+
+	// 配置オブジェクトの設定CSV
 	static constexpr const char* INSTANCE_LIST = "asset\\instance.csv";
 
+	// フィーバー演出用イージング
 	static float easeInExpo(float t) {
 		return (powf(2.0f, 8.0f * t) - 1.0f) / 255.0f;
 	}
+
+	// フィーバー演出用イージング
 	static float easeInCirc(float t) {
 		return 1.0f - sqrtf(1.0f - t);
 	}
@@ -70,10 +81,16 @@ namespace MainGameScene {
 	{
 		Uninit();
 
-		// ステージ設定
+		Uninit();
+
+		// =======================================================
+		// ステージ関連のロード
+		// 背景、コース、観客、配置オブジェクトを生成する
+		// =======================================================
 		{
 			background = LoadModel(GetCommonString("course_background"));
 
+			// コースの見た目・当たり判定・レールアニメーションを生成
 			MGObject courseCollision = LoadMGO(GetCommonString("course_collision").c_str());
 			course = AddGameObject(
 				Course(
@@ -84,30 +101,42 @@ namespace MainGameScene {
 			);
 			courseCollision.Release();
 
+			// ゴール後に表示する観客モデル
 			gallery = AddGameObject(
-				GameObjectModel(LoadModel(GetCommonString("course_gallery")), LoadAnimation(GetCommonString("course_gallery_animation"))),
+				GameObjectModel(
+					LoadModel(GetCommonString("course_gallery")),
+					LoadAnimation(GetCommonString("course_gallery_animation"))
+				),
 				LAYER_GALLERY
 			);
 			gallery->enable = false;
 
-			// オブジェクト配置
+			// =======================================================
+			// コース上の配置オブジェクト生成
+			// Maya等から出力した配置情報とCSV設定を紐づけて生成する
+			// =======================================================
 			{
-				// CSVファイルから設定を読み込む
 				D_TABLE table;
 				D_KVTABLE keyValuePair;
+
+				// instance.csvを読み込み
 				ReadCSVFromPath(INSTANCE_LIST, table);
 
-				// TableデータからKey-Value-Pairへ変換
+				// instance_idをキーにして検索しやすい形へ変換
 				TableToKeyValuePair("instance_id", table, keyValuePair);
 
+				// 配置データを読み込み
 				MGObject mgo = LoadMGO(GetCommonString("course_items").c_str());
 				ARRANGEMENT* items = GetArrangementByMGObject(mgo);
+
 				for (int i = 0; i < items->instanceNum; i++) {
 
+					// CSVに設定があるインスタンスだけ生成
 					if (keyValuePair.count(items->instances[i].instance)) {
 						auto& row = keyValuePair.at(items->instances[i].instance);
 						std::string type = row["type"];
 
+						// 石オブジェクト
 						if (type == "stone") {
 							MGObject mgi = LoadMGO(row["collision"].c_str());
 							AddGameObject(
@@ -118,10 +147,17 @@ namespace MainGameScene {
 									LoadAudio(row["destory_audio"]),
 									std::stof(row["destory_duration"]),
 									std::stof(row["restitution"]),
-									items->instances[i].position, items->instances[i].scale, items->instances[i].rotate, sceneName), LAYER_ITEMS
+									items->instances[i].position,
+									items->instances[i].scale,
+									items->instances[i].rotate,
+									sceneName
+								),
+								LAYER_ITEMS
 							);
 							mgi.Release();
 						}
+
+						// フィーバーゲージ回収アイテム
 						else if (type == "fever_piece") {
 							MGObject mgi = LoadMGO(row["collision"].c_str());
 							AddGameObject(
@@ -132,10 +168,17 @@ namespace MainGameScene {
 									LoadAudio(row["destory_audio"]),
 									std::stof(row["destory_duration"]),
 									std::stof(row["restitution"]),
-									items->instances[i].position, items->instances[i].scale, items->instances[i].rotate, sceneName), LAYER_ITEMS
+									items->instances[i].position,
+									items->instances[i].scale,
+									items->instances[i].rotate,
+									sceneName
+								),
+								LAYER_ITEMS
 							);
 							mgi.Release();
 						}
+
+						// 障害物
 						else if (type == "obstacle") {
 							MGObject mgi = LoadMGO(row["collision"].c_str());
 							AddGameObject(
@@ -146,32 +189,48 @@ namespace MainGameScene {
 									LoadAudio(row["destory_audio"]),
 									std::stof(row["destory_duration"]),
 									std::stof(row["restitution"]),
-									items->instances[i].position, items->instances[i].scale, items->instances[i].rotate, sceneName), LAYER_ITEMS
+									items->instances[i].position,
+									items->instances[i].scale,
+									items->instances[i].rotate,
+									sceneName
+								),
+								LAYER_ITEMS
 							);
 							mgi.Release();
 						}
+
+						// 通常の背景・装飾モデル
 						else if (type == "other") {
 							AddGameObject(
 								GameObjectModel(
 									LoadModel(row["model"]),
-									nullptr, {},
+									nullptr,
+									{},
 									items->instances[i].scale,
 									items->instances[i].position,
 									items->instances[i].rotate
-								), LAYER_ITEMS
+								),
+								LAYER_ITEMS
 							);
 						}
+
+						// ゴール判定
 						else if (type == "goal") {
 							AddGameObject(
 								Goal(
-									items->instances[i].position, items->instances[i].scale, items->instances[i].rotate, sceneName), LAYER_ITEMS
+									items->instances[i].position,
+									items->instances[i].scale,
+									items->instances[i].rotate,
+									sceneName
+								),
+								LAYER_ITEMS
 							);
 						}
 					}
 				}
+
 				mgo.Release();
 				items = nullptr;
-
 			}
 		}
 
@@ -511,32 +570,46 @@ namespace MainGameScene {
 
 	void MainGameScene::UpdatePlay()
 	{
+		// =======================================================
+		// プレイヤー入力処理
+		// ジャイロが有効なら傾き入力、無効ならキー・スティック入力を使う
+		// =======================================================
 		if (gyro) {
 			float acceX = GetInputAnalogValue(ANALOG_STATE_ACCE_X);
+
+			// 符号を一度保存して、絶対値で入力範囲を補正
 			bool sign = acceX < 0.0f;
 			acceX = abs(acceX);
+
+			// 小さすぎる入力を無視し、大きすぎる入力を制限
 			acceX = min(CONFIG.ACCELEROMETER_MAX, max(CONFIG.ACCELEROMETER_MIN, acceX));
+
+			// 0.0～1.0の範囲へ正規化
 			acceX = (acceX - CONFIG.ACCELEROMETER_MIN) / CONFIG.ACCELEROMETER_MAX;
+
 			if (sign) acceX = -acceX;
+
 			player->SetPan(acceX);
 		}
 		else {
+			// キーボード・デジタル入力用の疑似アナログ値
 			if (IsInputDown(INPUT_LEFT)) {
 				analogX -= analogXAcce;
-				if (analogX < -1.0f)analogX = -1.0f;
+				if (analogX < -1.0f) analogX = -1.0f;
 			}
 			else if (IsInputDown(INPUT_RIGHT)) {
 				analogX += analogXAcce;
-				if (analogX > 1.0f)analogX = 1.0f;
+				if (analogX > 1.0f) analogX = 1.0f;
 			}
 			else {
+				// 入力がない場合は中央に戻す
 				bool sign = analogX < 0.0f;
 				analogX = abs(analogX) - analogXAcce;
 				if (analogX < 0.0f) analogX = 0.0f;
-				if (sign) {
-					analogX = -analogX;
-				}
+				if (sign) analogX = -analogX;
 			}
+
+			// スティック入力があれば、より大きい入力を採用
 			float analogLeftX = GetInputAnalogValue(ANALOG_STATE_LEFT_X);
 			if (abs(analogLeftX) > abs(analogX)) {
 				player->SetPan(analogLeftX);
@@ -557,23 +630,30 @@ namespace MainGameScene {
 			SEFever->Stop();
 		}
 
-		// フィーバータイム
+
+		// =======================================================
+		// フィーバー開始処理
+		// OK入力でフィーバーゲージを使用する
+		// =======================================================
 		if (IsInputTrigger(INPUT_OK)) {
 			if (!player->IsFever()) {
 				player->StartFever();
+
+				// ゲージが残っていれば演出・SE開始
 				if (player->GetFeverAmount() > 0.0f) {
 					SECutin->Play();
 					SEFever->Play();
-					SEFever->SetSpeed(player->IsFever() * 1.0f);
+					SEFever->SetSpeed(player->IsFever());
 					cutinFade = 0.0f;
 					cutinHold = 0.0f;
 					cutin = true;
 				}
-				
 			}
 		}
 
-		// カットイン
+		// =======================================================
+		// フィーバー発動カットイン処理
+		// =======================================================
 		if (cutin) {
 			cutinFever->enable = true;
 			if (cutinFade == 1.0f) {
@@ -590,32 +670,42 @@ namespace MainGameScene {
 		cutinFever->position = F3{ (screenSize.x * -0.5f + cutinFever->size.x * 0.5f) * (2.0f - cutinFade), screenSize.y * -0.5f + cutinFever->size.y * 0.5f };
 
 
+		// =======================================================
 		// コースアウト処理
+		// カーテン演出後、プレイヤーを安全位置へ戻す
+		// =======================================================
 		if (!player->InCourse()) {
 			if (curtain->GetTime() == 0.0f) {
 				SEFalling->Play();
 			}
 			curtain->enable = true;
 		}
+
 		if (curtain->enable) {
 			if (curtain->GetTime() == 1.0f) {
 				curtain->SetReverse(true);
-
-				// プレイヤー転移
 				player->ResetPosition();
 			}
+
 			if (curtain->GetReverse() && curtain->GetTime() == 0.0f) {
 				curtain->enable = false;
 				curtain->Reset();
 			}
 		}
+
+		// 操作ヒント（入力デバイスに随時対応）
 		hintsLabel->SetValue(GetHintsLabel());
 
-		// 時間更新
+		// =======================================================
+		// タイム更新
+		// =======================================================
 		time += GetDeltaTime() * 0.001f;
 		uiTime->SetValue(StringToWString(FormatTime(time)));
 
+
+		// =======================================================
 		// カメラ更新
+		// =======================================================
 		cameraOffset = cameraOffset * 0.8f + player->velocity * 0.02f * 0.8f;
 		currentCamera->SetPosition(player->position + Rotate(F3{ 0.0f, 0.7f, -0.7f } - cameraOffset, player->rotate));
 		Course::GRAVITY gravity = course->GetGravity(currentCamera->GetPosition());
@@ -626,6 +716,11 @@ namespace MainGameScene {
 
 		Scene::Update();
 
+
+		// =======================================================
+		// プレイヤーとの当たり判定
+		// 2Dレイヤー以外の有効オブジェクトを対象にする
+		// =======================================================
 		for (auto itr = gameObjects.begin(); itr != gameObjects.end(); itr++) {
 			GameObject* gameObject = *itr;
 			if (!gameObject->enable) continue;
@@ -633,6 +728,9 @@ namespace MainGameScene {
 			player->Collision(gameObject); // onCollisionトリガー
 		}
 
+		// =======================================================
+		// ゴール判定
+		// =======================================================
 		if (player->InGoal()) {
 			SEGoal->Play();
 			startCountLabel->SetValue(L"CLEAR!");
@@ -641,20 +739,25 @@ namespace MainGameScene {
 			updateFunc = [this, p0 = currentCamera->GetPosition(), t = Progress{ 1000.0f, false }]() mutable { UpdateGoal(p0, t); };
 		}
 
+		// =======================================================
+		// フィーバー時エフェクト処理
+		// =======================================================
 		float fever = player->IsFever();
 		if (fever) {
 
+			// カメラ引き
 			float scale = easeInCirc(fever);
 			currentCamera->SetAngle(60.0f + 20.0f * scale);
 
+			// ブラー効果レンダーターゲット設定
 			feverEffects[0] = {
 				F3 {
 					((float)rand() / RAND_MAX) * 5.0f * ((rand() % 2) ? 1.0f : -1.0f) * scale,
 					((float)rand() / RAND_MAX) * 5.0f * ((rand() % 2) ? 1.0f : -1.0f) * scale,
 					0.0f
-				},
-				F3{ screenSize.x, screenSize.y, 0.0f } * (1.0f + 0.1f * scale),
-				F4{ 1.0f, 1.0f, 1.0f, 0.2f * scale }
+				},																// ポジション
+				F3{ screenSize.x, screenSize.y, 0.0f } * (1.0f + 0.1f * scale),	// サイズ
+				F4{ 1.0f, 1.0f, 1.0f, 0.2f * scale }							// カラー
 			};
 
 			feverEffects[1] = {
@@ -662,9 +765,9 @@ namespace MainGameScene {
 					((float)rand() / RAND_MAX) * 5.0f * ((rand() % 2) ? 1.0f : -1.0f) * scale,
 					((float)rand() / RAND_MAX) * 5.0f * ((rand() % 2) ? 1.0f : -1.0f) * scale,
 					0.0f
-				},
-				F3{ screenSize.x, screenSize.y, 0.0f } *(1.0f + 0.06f * scale),
-				F4{ 1.0f, 1.0f, 1.0f, 0.2f * scale }
+				},																 // ポジション
+				F3{ screenSize.x, screenSize.y, 0.0f } *(1.0f + 0.06f * scale),	 // サイズ
+				F4{ 1.0f, 1.0f, 1.0f, 0.2f * scale }							 // カラー
 			};
 		}
 		else {
@@ -679,6 +782,9 @@ namespace MainGameScene {
 		}
 		#endif
 		
+		// =======================================================
+		// 一時停止処理
+		// =======================================================
 		if (IsInputTrigger(INPUT_START)) {
 			SEOK->Play();
 			updateFunc = [this]() -> void { UpdatePause(); };
@@ -687,8 +793,7 @@ namespace MainGameScene {
 
 	void MainGameScene::UpdateGoal(F3& p0, Progress &t)
 	{
-		static Progress holdT{ 5000.0f, false };
-		
+		// ゴール演出中に表示・更新対象として残すレイヤー
 		static std::set<unsigned int> layers = {
 				LAYER_PLAYER,
 				LAYER_GALLERY,
@@ -696,41 +801,56 @@ namespace MainGameScene {
 				LAYER_COUNT
 		};
 
+		// ゴール演出が完了したらエピローグへ移行
 		if (t == 1.0f) {
 			updateFunc = [this]() -> void { UpdateEpilogue(); };
 		}
 
+		// フィーバーSEが再生中なら、ゴール演出の進行に合わせて音量を下げる
 		if (!SEFever->IsFinished()) {
 			SEFever->SetVolume(1.0f - t);
 		}
 
-		// 減速
+		// プレイヤーを徐々に減速させる
 		player->velocity *= 1.0f - 2.0f * GetDeltaTime() * 0.001f;
-		if (DistanceSquare(player->velocity, {}) < 0.1f) {
-			// プレイヤーが止まってから
 
+		// プレイヤーが十分遅くなったら、ゴール演出本体を開始
+		if (DistanceSquare(player->velocity, {}) < 0.1f) {
+
+			// 指定レイヤー以外のオブジェクトを徐々にフェードアウト
 			for (auto& gameObject : gameObjects) {
 				if (!layers.count(gameObject->layer)) {
 					gameObject->color.w = 1.0f - t;
 				}
 			}
 
+			// プレイヤーを完全停止
 			player->velocity = {};
+
+			// 観客モデルをプレイヤー位置に表示
 			gallery->enable = true;
 			gallery->position = player->position;
 			gallery->rotate = player->rotate;
 			gallery->color.w = t;
+
+			// CLEAR表示をフェードインしつつ上へ移動
 			startCountLabel->color.w = t;
 			startCountLabel->position = { 0.0f, 200.0f * t };
 
-			// カメラ更新
+			// ゴール演出用のカメラ位置を計算
 			F3 p1 = player->position + Rotate(CONFIG.GOAL_CAMERA_ANGLE * CONFIG.GOAL_CAMERA_DISTANCE, player->rotate);
+
+			// 現在位置p0からゴール演出用位置p1へカメラを補間
 			currentCamera->SetPosition(Lerp(p0, p1, t));
+
+			// カメラをプレイヤー少し上方向へ向ける
 			currentCamera->SetFront(player->position + F3{ 0.0f, 1.0f, 0.0f } - currentCamera->GetPosition());
 
+			// ゴール演出の進行度を進める
 			t.IncreaseValue(GetDeltaTime());
 		}
 		
+		// シーン全体を更新
 		Scene::Update();
 		
 	}

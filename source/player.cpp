@@ -1,3 +1,5 @@
+// プレイヤークラス実装
+
 #include "player.h"
 #include "course.h"
 #include "keyboard.h"
@@ -11,26 +13,42 @@
 #include "obstacle.h"
 #include "scene.h"
 
+// フィーバーゲージへのチャージ速度（毎秒）
 static constexpr const float FEVER_STOCK_CHARAGE_SPEED = 3000.0f;
 
+// 設定値ロード（config.csv）
 static const Player::_CONFIG CONFIG = LoadConfig<Player::_CONFIG>("asset\\config.csv", [](const D_KVTABLE& table) -> Player::_CONFIG {
 	return {
+		// 通常時最大速度
 		TABLE_FLOAT_VALUE(table, "PLAYER_MAX_VELOCITY", 9.0f),
+		// フィーバー時最大速度
 		TABLE_FLOAT_VALUE(table, "PLAYER_MAX_VELOCITY_FEVER", 12.0f),
+		// 通常加速
 		TABLE_FLOAT_VALUE(table, "PLAYER_ACCELERATION", 3.0f),
+		// フィーバー加速
 		TABLE_FLOAT_VALUE(table, "PLAYER_ACCELERATION_FEVER", 10.0f),
+		// 落下時加速度
 		TABLE_FLOAT_VALUE(table, "PLAYER_FALLING_ACCELERATION", 6.0f),
+		// 減速（割合）
 		TABLE_FLOAT_VALUE(table, "DECELERATION_PERCENT", 0.1f),
+		// 減速（定数）
 		TABLE_FLOAT_VALUE(table, "DECELERATION_CONSTANT", 0.01f),
+		// リスポーン時の上方向オフセット
 		TABLE_FLOAT_VALUE(table, "POSITION_RESET_UP_OFFSET", 3.0f),
+		// 横移動加速
 		TABLE_FLOAT_VALUE(table, "HORIZONTAL_ACCELERATION", 1.0f),
+		// 水しぶき発生最小速度
 		TABLE_FLOAT_VALUE(table, "SPLASH_MIN_VELOCITY", 1.0f),
+		// フィーバー最大ストック数
 		TABLE_INT_VALUE(table, "FEVER_AMOUNT_MAX", 5),
+		// フィーバー持続時間
 		TABLE_FLOAT_VALUE(table, "FEVER_TIME", 10000.0f),
+		// 水面判定の厚み
 		TABLE_FLOAT_VALUE(table, "SURFACE_THICKNESS", 4.0f)
 	};
-});
+	});
 
+// アセットロード
 static const Player::_ASSET ASSET = LoadConfig<Player::_ASSET>("asset\\asset_list.csv", [](const D_KVTABLE& table) -> Player::_ASSET {
 	return {
 		TABLE_STR_VALUE(table, "BOAT_MODEL", "asset\\model\\boat.mgm"),
@@ -43,13 +61,14 @@ static const Player::_ASSET ASSET = LoadConfig<Player::_ASSET>("asset\\asset_lis
 		TABLE_STR_VALUE(table, "SE_SWASH", "asset\\sound\\Landing_SE.wav"),
 		TABLE_STR_VALUE(table, "SE_DAMAGE", "asset\\sound\\damage.wav"),
 	};
-});
+	});
 
-Player::Player(const F3& size) : 
-	GameObject(size), 
+Player::Player(const F3& size) :
+	GameObject(size),
 	SESwash(GameObjectAudio(LoadAudio(ASSET.SE_SWASH), false)),
 	SEDamage(GameObjectAudio(LoadAudio(ASSET.SE_DAMAGE), false)) {
 
+	// モデル・アニメーションロード
 	boat = LoadModel(ASSET.BOAT_MODEL);
 	turbo = LoadModel(ASSET.TURBO_MODEL);
 	turboIgnition = LoadAnimation(ASSET.TURBO_IGNITION);
@@ -57,149 +76,162 @@ Player::Player(const F3& size) :
 	leftAnim = LoadAnimation(ASSET.BOAT_LEFT_ANIMATION);
 	rightAnim = LoadAnimation(ASSET.BOAT_RIGHT_ANIMATION);
 
+	// 当たり判定ロード
 	MGObject mgi = LoadMGO(ASSET.BOAT_COLLISION.c_str());
 	ARRANGEMENT* arrangement = GetArrangementByMGObject(mgi);
 	AddCollisionUnits(arrangement);
 
+	// 水しぶきエフェクト生成
 	splashEffects.reserve(arrangement->instanceNum);
 	for (int i = 0; i < arrangement->instanceNum; i++) {
 		MODEL_INSTANCE& instance = arrangement->instances[i];
 		if (!strcmp(instance.instance, "splash")) {
+			// インスタンス名が"splash"ならエフェクトとして登録
 			splashEffects.push_back(SPLASH{ new StarEffect(position + instance.position), instance.position });
 		}
 	}
 	splashEffects.shrink_to_fit();
 	mgi.Release();
 
+	// フィーバー初期化
 	feverAmount = { CONFIG.FEVER_TIME, false };
 
 	inCourse = 1.0f;
-
 }
 
 Player::~Player()
 {
+	// エフェクト解放（ポインタ管理注意）
 	splashEffects.clear();
-	
 }
 
-void Player::Update() 
+void Player::Update()
 {
-
 	float deltaTimeSec = GetDeltaTime() * 0.001f;
-	
+
 	if (!stop) {
 
-		// 一時保存からフィーバーゲージに少しずつチャージさせる
+		// ===== フィーバーゲージ処理 =====
+
+		// 使い切ったストック削除
 		feverStocks.remove_if([](Player::FEVER_STOCK& feverStock) {
 			return (feverStock.hold == 1.0f && feverStock.amount <= 0.0f);
-		});
+			});
+
+		// ストックを徐々にゲージへ加算
 		for (Player::FEVER_STOCK& feverStock : feverStocks) {
-			// hold = 破片がゲージUIに到達するまで
 			if (feverStock.hold == 1.0f) {
 				float charage = min(FEVER_STOCK_CHARAGE_SPEED * deltaTimeSec, feverStock.amount);
 				feverStock.amount -= charage;
 				feverAmount.IncreaseValue(charage);
 			}
+			// UI到達までの時間進行
 			feverStock.hold.IncreaseValue(GetDeltaTime());
 		}
 
+		// 速度リセット
 		if (resetVelocity) {
 			velocity = {};
 		}
-
 		resetVelocity = false;
+
 		F3 acceleration = {};
-		float waterDepth = 0.0f;
 
-		// 水面チェック
-		if (surfaceAlign.depth > 0.0f && surfaceAlign.depth < CONFIG.SURFACE_THICKNESS * ((fever)?3.0f:1.0f)) {
-			// 水面下
+		// ===== 水面判定 =====
+		if (surfaceAlign.depth > 0.0f && surfaceAlign.depth < CONFIG.SURFACE_THICKNESS * ((fever) ? 3.0f : 1.0f)) {
 
-			// 引力
+			// 水中処理
+
+			// 重力方向取得
 			F3 gravityDirect = Rotate({ 0.0f, -1.0f, 0.0f }, gravity.rotate);
+
+			// 浮力的な処理（深さ依存）
 			acceleration -= gravityDirect * surfaceAlign.depth * 10.0f;
+
+			// 落下中なら抵抗追加
 			if (Dot(Normalize(velocity), gravityDirect) > 0.0f) {
 				acceleration += gravityDirect * velocity * 10.0f;
 			}
 
-			if (fever) {
-				acceleration.z += CONFIG.PLAYER_ACCELERATION_FEVER;
-			}
-			else {
-				acceleration.z = CONFIG.PLAYER_ACCELERATION;
-			}
+			// 前進加速
+			acceleration.z = fever ? CONFIG.PLAYER_ACCELERATION_FEVER : CONFIG.PLAYER_ACCELERATION;
 
+			// 横移動
 			acceleration.x = pan * CONFIG.HORIZONTAL_ACCELERATION;
 
+			// 姿勢補正（水面に沿う）
 			F3 forward = Rotate({ 0.0f, 0.0f, 1.0f }, rotate);
 			F3 upper = Rotate({ 0.0f, 1.0f, 0.0f }, rotate);
 
 			forward = Lerp(forward, Normalize(gravity.forward + Rotate({ 0.0f, 0.0f, 3.0f }, surfaceAlign.rotate)), deltaTimeSec * 6.0f);
 			upper = Lerp(upper, Normalize(gravity.upper + Rotate({ 0.0f, 3.0f, 0.0f }, surfaceAlign.rotate)), deltaTimeSec * 6.0f);
-			
-			rotate = Quaternion(forward, upper);
 
+			rotate = Quaternion(forward, upper);
 		}
 		else {
-			// 水面以上
+			// 空中処理
 
-			// 引力
 			F3 gravityDirect = Rotate({ 0.0f, -1.0f, 0.0f }, gravity.rotate);
+
+			// 上向き速度なら減衰
 			if (Dot(Normalize(velocity), gravityDirect) < 0.0f) {
 				acceleration += gravityDirect * velocity * 10.0f;
 			}
-			acceleration += gravityDirect * CONFIG.PLAYER_FALLING_ACCELERATION;
 
+			// 落下加速
+			acceleration += gravityDirect * CONFIG.PLAYER_FALLING_ACCELERATION;
 		}
 
-		// 速度更新
-		velocity += acceleration * deltaTimeSec;
+		// ===== 物理更新 =====
 
-		// ポジション更新
+		velocity += acceleration * deltaTimeSec;
 		position += Rotate(velocity, rotate) * deltaTimeSec;
+
+		// エフェクト追従
 		for (auto& splashEffect : splashEffects) {
 			if (!splashEffect.object->scene && scene) {
 				scene->AddGameObjectPtr(splashEffect.object, layer);
 			}
 			splashEffect.object->position = position + Rotate(splashEffect.offset, rotate);
 		}
-		
-		// 減速
-		float maxVelocity = CONFIG.PLAYER_MAX_VELOCITY;
-		if (fever) {
-			maxVelocity = CONFIG.PLAYER_MAX_VELOCITY_FEVER;
-		}
+
+		// ===== 減速処理 =====
+
+		float maxVelocity = fever ? CONFIG.PLAYER_MAX_VELOCITY_FEVER : CONFIG.PLAYER_MAX_VELOCITY;
+
+		// 速度制限
 		if (DistanceSquare(velocity, {}) > maxVelocity * maxVelocity) {
 			velocity = Normalize(velocity) * maxVelocity;
 		}
+
+		// 減衰
 		velocity *= 1.0f - CONFIG.DECELERATION_PERCENT * deltaTimeSec;
+
 		float decelerationConstant = CONFIG.DECELERATION_CONSTANT * deltaTimeSec;
+
+		// 各軸ごとの微減速
 		velocity.x *= 1.0f - min(decelerationConstant / fabsf(velocity.x), 1.0f);
 		velocity.y *= 1.0f - min(decelerationConstant / fabsf(velocity.y), 1.0f);
 		velocity.z *= 1.0f - min(decelerationConstant / fabsf(velocity.z), 1.0f);
 
-		// 着水SE
+		// 着水音リセット
 		if (SESwash.IsFinished()) {
 			swash = false;
 		}
 	}
-	
-	#ifdef _DEBUG
-	if (Keyboard_IsKeyDownTrigger(KK_F)) {
-		feverAmount.IncreaseValue(1.0f / CONFIG.FEVER_AMOUNT_MAX * CONFIG.FEVER_TIME);
-	}
-	#endif
 
+	// フィーバー終了判定
 	if (feverAmount == 0.0f) {
 		fever = false;
 	}
 
+	// ゴール後処理
 	if (inGoal) {
 		fever = false;
 		position += Rotate(velocity, rotate) * deltaTimeSec;
 	}
 
+	// フィーバー中の処理
 	if (fever) {
 		feverTransit.IncreaseValue(GetDeltaTime());
 		turboRotateProgress.IncreaseValue(GetDeltaTime());
@@ -209,6 +241,7 @@ void Player::Update()
 		feverTransit.IncreaseValue(-GetDeltaTime());
 	}
 
+	// 無敵時点滅
 	if (invincible != 0.0f) {
 		color.w = fabsf(sinf(blinking * 2 * PI));
 	}
@@ -216,14 +249,15 @@ void Player::Update()
 		color.w = 1.0f;
 	}
 
+	// 状態更新
 	surfaceAlign = {};
-
 	blinking.IncreaseValue(GetDeltaTime());
 	invincible.IncreaseValue(-GetDeltaTime());
+
 	if (!stop) {
 		inCourse.IncreaseValue(-GetDeltaTime());
 	}
-	
+
 	UpdateWorldCollisionUnits();
 }
 

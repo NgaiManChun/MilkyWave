@@ -412,12 +412,9 @@ namespace MG {
 		renderer->SetUVRange({ 1.0f, 1.0f });
 		renderer->UpdateConstant();
 		renderer->UpdateLight();
-		//renderer->SetRasterizerState(RASTERIZER_STATE_WIREFRAME);
 
 		// ƒ|ƒŠƒSƒ“•`‰æ
 		context->DrawIndexed(36, 0, 0);
-
-		//renderer->SetRasterizerState(RASTERIZER_STATE_CULL_NONE);
 	}
 
 } // namespace MG

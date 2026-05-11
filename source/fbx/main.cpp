@@ -317,10 +317,6 @@ namespace FBXDATA {
 			strcpy_s(current, length, animationChannel.nodeName);
 			current += length;
 
-			/*distChannel->positionKeys = nullptr;
-			distChannel->scalingKeys = nullptr;
-			distChannel->rotationKeys = nullptr;
-			distChannel->nodeName = nullptr;*/
 		}
 
 		return data;
@@ -349,6 +345,7 @@ namespace FBXDATA {
 		model.meshes = new MESH[scene->mNumMeshes]{};
 		model.textures = new TEXTURE[scene->mNumTextures]{};
 		model.rootNode = new MODEL_NODE{};
+
 		// メッシュ読み込み
 		for (int i = 0; i < scene->mNumMeshes; i++)
 		{
@@ -386,7 +383,7 @@ namespace FBXDATA {
 						mesh.vertices[v].diffuse = { 1.0f, 1.0f, 1.0f, 1.0f };
 						aiMaterial* material = scene->mMaterials[aimesh->mMaterialIndex];
 						aiColor4D color;
-						//$raw.Maya|baseColor
+
 						if (material->Get(AI_MATKEY_BASE_COLOR, color) == AI_SUCCESS) {
 							mesh.vertices[v].diffuse.x = color.r;
 							mesh.vertices[v].diffuse.y = color.g;
@@ -398,6 +395,7 @@ namespace FBXDATA {
 							mesh.vertices[v].diffuse.z = color.b;
 							
 						}
+
 						ai_real opacity;
 						if (material->Get(AI_MATKEY_OPACITY, opacity) == AI_SUCCESS) {
 							mesh.vertices[v].diffuse.w = opacity;
@@ -548,7 +546,6 @@ namespace FBXDATA {
 		model.textures = nullptr;
 		model.rootNode = nullptr;
 
-		//aiReleaseImport(scene);
 		importer.FreeScene();
 	}
 
@@ -577,6 +574,7 @@ namespace FBXDATA {
 			animation.channelNum = aianimation->mNumChannels;
 			animation.channels = new ANIMATION_CHANNEL[aianimation->mNumChannels]{};
 			for (int a = 0; a < aianimation->mNumChannels; a++) {
+
 				// アニメーションノード、適応オブジェクトごと
 				aiNodeAnim* ainodeanim = aianimation->mChannels[a];
 				ANIMATION_CHANNEL& animationChannel = animation.channels[a];
@@ -736,7 +734,6 @@ namespace FBXDATA {
 		const aiScene* scene = importer.ReadFile(fileName
 			, aiProcessPreset_TargetRealtime_MaxQuality | aiProcess_ConvertToLeftHanded);
 
-		//const aiScene* scene = aiImportFile(fileName, aiProcessPreset_TargetRealtime_MaxQuality | aiProcess_ConvertToLeftHanded);
 		assert(scene);
 
 		std::list<MODEL_INSTANCE> list;
@@ -779,7 +776,7 @@ namespace FBXDATA {
 		file.close();
 
 		delete[] arrangement.instances;
-		//aiReleaseImport(scene);
+
 		importer.FreeScene();
 	}
 
